@@ -44,6 +44,12 @@ _ALL_SUPPORTED = (
 
 _MP4_COVER_FORMAT_JPEG = 13
 _AV1_CODEC_ID = av.Codec("av1", "r").id
+_H264_PROFILES = {
+    "baseline": "baseline",
+    "constrained baseline": "baseline",
+    "main": "main",
+    "high": "high",
+}
 
 
 class _SaveStages:
@@ -235,6 +241,19 @@ class FormatDispatchThumbnailWriter:
     # ------------------------------------------------------------------
     # Format-specific embedding helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def concat_ineligibility_reason(video_path: str) -> str | None:
+        """Inspect an MP4 for compatibility with stream-copy preview insertion.
+
+        Args:
+            video_path: Path to an MP4 without a previously inserted preview.
+
+        Returns:
+            A reason conversion is needed, or None if concatenation is supported.
+        """
+        _, reason = FormatDispatchThumbnailWriter._concat_decision(video_path)
+        return reason
 
     def reencode_reason(self, video: VideoFile) -> str | None:
         """Return the known reason MP4/MOV saving will re-encode the video."""
@@ -450,12 +469,6 @@ class FormatDispatchThumbnailWriter:
             stream = playable[0]
             codec = stream.codec_context
             profile = (codec.profile or "").lower()
-            h264_profiles = {
-                "baseline": "baseline",
-                "constrained baseline": "baseline",
-                "main": "main",
-                "high": "high",
-            }
             is_av1 = codec.codec.id == _AV1_CODEC_ID
             # average_rate need not equal base_rate: the concat demuxer's explicit
             # segment duration (plus a matching -itsoffset) keeps A/V in sync
@@ -468,7 +481,7 @@ class FormatDispatchThumbnailWriter:
                     "(fast copy supports H.264 and AV1 only)"
                 )
             if (is_av1 and profile != "main") or (
-                not is_av1 and profile not in h264_profiles
+                not is_av1 and profile not in _H264_PROFILES
             ):
                 reasons.append(f"profile is {(codec.profile or '(none)')!r}")
             if codec.format is None or codec.format.name != "yuv420p":
@@ -496,7 +509,7 @@ class FormatDispatchThumbnailWriter:
                     "av1" if is_av1 else "h264",
                     stream.width,
                     stream.height,
-                    "main" if is_av1 else h264_profiles[profile],
+                    "main" if is_av1 else _H264_PROFILES[profile],
                     str(frame_rate),
                     1 / float(frame_rate),
                     time_base.denominator,
@@ -565,10 +578,13 @@ class FormatDispatchThumbnailWriter:
             preview_stream = preview.streams.video[0]
             preview_codec = preview_stream.codec_context
             preview_time_base = preview_stream.time_base
+            preview_profile = (preview_codec.profile or "").lower()
+            if codec_name == "h264":
+                preview_profile = _H264_PROFILES.get(preview_profile, preview_profile)
             if (
                 (preview_codec.codec.id != _AV1_CODEC_ID if codec_name == "av1"
                  else preview_codec.name != "h264")
-                or (preview_codec.profile or "").lower() != profile
+                or preview_profile != profile
                 or preview_codec.format is None
                 or preview_codec.format.name != "yuv420p"
                 or preview_stream.width != width

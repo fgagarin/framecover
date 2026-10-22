@@ -90,14 +90,19 @@ source file can never be used as the destination.
 
 Conversion runs in the background with a stage indicator. FFmpeg first attempts
 to remux the first playable video and all audio tracks without re-encoding.
-If the streams cannot be stored in MP4, the application checks FFmpeg's available
-encoders and tries H.264/AAC encoding. Re-encoding can take time and reduce
+The result must also support stream-copy preview insertion. If the streams cannot
+be stored in MP4 or are incompatible with that path (for example MPEG-2 or HEVC),
+the application checks FFmpeg's available encoders and converts to compatible
+H.264/AAC during conversion, rather than when saving the thumbnail.
+Re-encoding can take time and reduce
 quality. Subtitles, additional video streams, attachments, and data tracks are
 not transferred. Not every input codec or damaged file can be converted.
 
 The source is left untouched, and failed conversion does not replace an existing
 destination. On success, the MP4 opens automatically: select a frame and save its
-thumbnail as usual. Already supported containers keep their existing workflow.
+thumbnail as usual. Saving or replacing its preview encodes only the preview
+frame and concatenates it with the copied video; the main video is not re-encoded.
+Already supported containers keep their existing workflow.
 
 FFmpeg is supplied by `imageio-ffmpeg`. To use another build with the required
 decoders and H.264/AAC encoders, set `IMAGEIO_FFMPEG_EXE` to its executable path

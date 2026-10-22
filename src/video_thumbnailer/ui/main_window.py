@@ -335,7 +335,8 @@ class MainWindow(QMainWindow):
             "This video format is not supported for thumbnail editing.\n\n"
             "Convert it to a separate MP4 and open it to choose a thumbnail?\n"
             "The original file will not be changed. FFmpeg first tries lossless "
-            "remuxing, then H.264/AAC encoding if needed (which can take time "
+            "remuxing, then H.264/AAC encoding if needed for stream-copy preview "
+            "insertion (which can take time "
             "and reduce quality).\n\n"
             "Only the first playable video and all audio tracks are kept; "
             "subtitles and data tracks are not transferred.",

@@ -13,6 +13,7 @@ import av
 import imageio_ffmpeg  # type: ignore[import-untyped]
 from av.error import FFmpegError
 
+from video_thumbnailer.core.thumbnail_writer import FormatDispatchThumbnailWriter
 from video_thumbnailer.exceptions import ConversionError, NoVideoStreamError
 
 __all__ = ["FFmpegVideoConverter"]
@@ -47,7 +48,7 @@ class FFmpegVideoConverter:
         overwrite: bool = False,
         on_progress: Callable[[str], None] | None = None,
     ) -> str:
-        """Remux first, then try available H.264 encoders with AAC if needed.
+        """Remux if concat-compatible, otherwise encode to H.264/AAC once.
 
         Only the first playable video and all audio tracks are retained.
         The destination is published only after FFmpeg completes successfully.
@@ -106,11 +107,20 @@ class FFmpegVideoConverter:
             output = ["-movflags", "+faststart", str(temporary_path)]
             if on_progress is not None:
                 on_progress("Remuxing to MP4 without re-encoding")
+            reason: str | None
             try:
                 _run_ffmpeg([*common, "-c", "copy", *output])
             except subprocess.CalledProcessError as exc:
-                logger.warning("MP4 remux failed: %s", _failure_details(exc))
-                self._transcode(common, output, on_progress, exc)
+                reason = _failure_details(exc)
+                logger.warning("MP4 remux failed: %s", reason)
+            else:
+                reason = FormatDispatchThumbnailWriter.concat_ineligibility_reason(
+                    str(temporary_path)
+                )
+                if reason is not None:
+                    logger.info("MP4 remux requires normalization: %s", reason)
+            if reason is not None:
+                self._transcode(common, output, on_progress, reason)
 
             with av.open(str(temporary_path)) as converted:
                 if not converted.streams.video:
@@ -135,7 +145,7 @@ class FFmpegVideoConverter:
         common: list[str],
         output: list[str],
         on_progress: Callable[[str], None] | None,
-        remux_error: subprocess.CalledProcessError,
+        reason: str,
     ) -> None:
         encoders = _run_ffmpeg(
             [common[0], "-hide_banner", "-encoders"]
@@ -149,10 +159,10 @@ class FFmpegVideoConverter:
         candidates = [name for name in _H264_ENCODERS if name in available]
         if not candidates or "aac" not in available:
             raise ConversionError(
-                "Lossless MP4 remux failed and this FFmpeg has no usable "
+                "A concat-compatible MP4 requires encoding, but FFmpeg has no usable "
                 "H.264/AAC encoders. Install an FFmpeg build with libx264 and AAC "
                 "and select it using IMAGEIO_FFMPEG_EXE.\n"
-                f"Remux error: {_failure_details(remux_error)}"
+                f"Conversion reason: {reason}"
             )
         failures: list[str] = []
         for encoder in candidates:
@@ -165,14 +175,20 @@ class FFmpegVideoConverter:
             try:
                 _run_ffmpeg([
                     *common, "-c:v", encoder, *quality,
+                    "-profile:v", "high",
                     "-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2", "-pix_fmt", "yuv420p",
                     "-c:a", "aac", "-b:a", "192k", *output,
                 ])
-                return
+                incompatibility = (
+                    FormatDispatchThumbnailWriter.concat_ineligibility_reason(output[-1])
+                )
+                if incompatibility is None:
+                    return
+                detail = f"{encoder}: incompatible output: {incompatibility}"
             except subprocess.CalledProcessError as exc:
                 detail = f"{encoder}: {_failure_details(exc)}"
-                logger.warning("MP4 encoding failed: %s", detail)
-                failures.append(detail)
+            logger.warning("MP4 encoding failed: %s", detail)
+            failures.append(detail)
         raise ConversionError(
             "All available H.264 encoders failed:\n" + "\n".join(failures)
         )

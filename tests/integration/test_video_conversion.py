@@ -16,25 +16,36 @@ from video_thumbnailer.exceptions import UnsupportedFormatError
 from video_thumbnailer.models import TimelinePosition, VideoFormat
 
 
-@pytest.mark.parametrize("transcode", [False, True], ids=["m2ts-remux", "ffv1-transcode"])
-def test_conversion_then_thumbnail_workflow(tmp_path, transcode):
-    source = tmp_path / ("source.mkv" if transcode else "source.m2ts")
+@pytest.mark.parametrize(
+    "codec,profile,transcode",
+    [
+        ("libx264", "high", False),
+        ("libx264", "baseline", False),
+        ("libx264", "main", False),
+        ("mpeg2video", None, True),
+        ("ffv1", None, True),
+    ],
+    ids=["h264-high", "h264-baseline", "h264-main", "mpeg2", "ffv1"],
+)
+def test_conversion_then_thumbnail_workflow(tmp_path, codec, profile, transcode):
+    source = tmp_path / ("source.mkv" if codec == "ffv1" else "source.m2ts")
     target = tmp_path / "converted.mp4"
     subprocess.run(
         [
             imageio_ffmpeg.get_ffmpeg_exe(), "-y",
             "-f", "lavfi", "-i", "testsrc=size=96x64:rate=25:duration=1",
             "-f", "lavfi", "-i", "sine=frequency=440:duration=1",
-            "-c:v", "ffv1" if transcode else "libx264",
-            "-c:a", "pcm_s16le" if transcode else "aac",
+            "-c:v", codec,
+            *(["-profile:v", profile] if profile else []),
+            "-c:a", "pcm_s16le" if codec == "ffv1" else "aac",
             "-pix_fmt", "yuv420p",
-            "-f", "matroska" if transcode else "mpegts", str(source),
+            "-f", "matroska" if codec == "ffv1" else "mpegts", str(source),
         ],
         check=True, capture_output=True,
     )
     original = source.read_bytes()
     loader = PyAVVideoLoader()
-    if not transcode:
+    if codec != "ffv1":
         with pytest.raises(UnsupportedFormatError):
             loader.load(str(source))
     stages = []
@@ -50,9 +61,40 @@ def test_conversion_then_thumbnail_workflow(tmp_path, transcode):
     assert abs(video.duration_ms - 1000) <= 100
     assert (video.width, video.height) == (96, 64)
     frame = PyAVFrameExtractor().extract(video, TimelinePosition(offset_ms=400))
-    result = FormatDispatchThumbnailWriter().write(video, frame, position_ms=400)
-    assert result.success, result.error_message
-    assert loader.load(str(target)).existing_thumbnail is not None
+    writer = FormatDispatchThumbnailWriter()
+    assert writer.reencode_reason(video) is None
+    with av.open(str(target)) as container:
+        original_packets = [
+            bytes(packet) for packet in container.demux(video=0) if packet.size
+        ]
+    with av.open(str(target)) as container:
+        original_frames = [
+            frame.to_image().tobytes() for frame in container.decode(video=0)
+        ]
+    for position in (400, 600):
+        save_stages = []
+        result = writer.write(
+            video, frame, position_ms=position,
+            on_progress=lambda name, elapsed: (
+                save_stages.append(name) if elapsed is None else None
+            ),
+        )
+        assert result.success, result.error_message
+        assert "Encoding preview frame" in save_stages
+        assert "Copying video streams" in save_stages
+        assert "Encoding video" not in save_stages
+        with av.open(str(target)) as container:
+            packets = [
+                bytes(packet) for packet in container.demux(video=0) if packet.size
+            ]
+        # The concat demuxer can insert parameter sets into the first source IDR.
+        assert packets[2:] == original_packets[1:]
+        with av.open(str(target)) as container:
+            frames = list(container.decode(video=0))
+        assert len(frames) == 26
+        assert [frame.to_image().tobytes() for frame in frames[1:]] == original_frames
+        video = loader.load(str(target))
+        assert video.existing_thumbnail is not None
     assert source.read_bytes() == original
 
 

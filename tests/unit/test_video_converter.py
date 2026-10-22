@@ -28,6 +28,10 @@ def conversion(tmp_path):
         patch(f"{MODULE}.av.open") as open_video,
         patch(f"{MODULE}.imageio_ffmpeg.get_ffmpeg_exe", return_value="ffmpeg"),
         patch(f"{MODULE}._run_ffmpeg") as run,
+        patch(
+            f"{MODULE}.FormatDispatchThumbnailWriter.concat_ineligibility_reason",
+            return_value=None,
+        ),
     ):
         open_video.return_value.__enter__.return_value = container
         yield FFmpegVideoConverter(), source, target, run, container
@@ -71,7 +75,59 @@ def test_falls_back_to_available_encoder(conversion):
     assert commands[2][commands[2].index("-c:v") + 1] == "libx264"
     assert commands[2][commands[2].index("-c:a") + 1] == "aac"
     assert "yuv420p" in commands[2]
+    assert commands[2][commands[2].index("-profile:v") + 1] == "high"
     assert progress[-1] == "Encoding MP4 with libx264 / AAC"
+
+
+def test_remuxable_but_concat_incompatible_video_is_normalized(conversion):
+    converter, source, target, run, _ = conversion
+    run.side_effect = [
+        None,
+        subprocess.CompletedProcess([], 0, stdout=b" V....D libx264\n A..... aac\n"),
+        None,
+    ]
+    with patch(
+        f"{MODULE}.FormatDispatchThumbnailWriter.concat_ineligibility_reason",
+        side_effect=["MPEG-2 cannot be concatenated", None],
+    ):
+        converter.convert(str(source), str(target))
+    assert "libx264" in run.call_args.args[0]
+
+
+def test_incompatible_encoded_output_is_not_published(conversion):
+    converter, source, target, run, _ = conversion
+    target.write_bytes(b"existing")
+    run.side_effect = [
+        _ffmpeg_error(),
+        subprocess.CompletedProcess([], 0, stdout=b" V....D libx264\n A..... aac\n"),
+        None,
+    ]
+    with patch(
+        f"{MODULE}.FormatDispatchThumbnailWriter.concat_ineligibility_reason",
+        return_value="invalid frame rate",
+    ):
+        with pytest.raises(ConversionError, match="incompatible output"):
+            converter.convert(str(source), str(target), overwrite=True)
+    assert target.read_bytes() == b"existing"
+    assert list(target.parent.glob(".output-*.mp4")) == []
+
+
+def test_incompatible_encoder_output_tries_next_encoder(conversion):
+    converter, source, target, run, _ = conversion
+    run.side_effect = [
+        _ffmpeg_error(),
+        subprocess.CompletedProcess(
+            [], 0, stdout=b" V....D libx264\n V....D h264_nvenc\n A..... aac\n"
+        ),
+        None,
+        None,
+    ]
+    with patch(
+        f"{MODULE}.FormatDispatchThumbnailWriter.concat_ineligibility_reason",
+        side_effect=["unsupported profile", None],
+    ):
+        converter.convert(str(source), str(target))
+    assert "h264_nvenc" in run.call_args.args[0]
 
 
 def test_unusable_encoder_falls_back_to_next_available(conversion):
