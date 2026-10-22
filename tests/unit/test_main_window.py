@@ -108,6 +108,7 @@ class TestMainWindowConstruction:
     ) -> None:
         info = window._start_info_label
         assert "Тестовая сборка" in info.text()
+        assert "дата релиза не назначена" in info.text()
         assert __version__ in info.text()
         assert "Fedor Gagarin" in info.text()
         assert "LICENSE" in info.text()
@@ -433,6 +434,7 @@ class TestMainWindowVideoLoading:
         mock_msg.assert_called_once()
         # Drop label should revert to placeholder text
         assert "Drop" in window._drop_label.text()
+        assert window._start_info_label.isVisible()
 
     def test_drop_label_text_after_load(self, window: MainWindow) -> None:
         vf = _make_vf("/video/test.mp4")
