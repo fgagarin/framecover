@@ -99,16 +99,16 @@ class TestMainWindowConstruction:
 
     def test_drop_zone_visible(self, window: MainWindow) -> None:
         assert window._drop_label.isVisible()
-        assert "1 — Открой видео" in window._drop_label.text()
-        assert "2 — Выбери кадр" in window._drop_label.text()
-        assert "3 — Сохрани превью" in window._drop_label.text()
+        assert "1 — Open a video" in window._drop_label.text()
+        assert "2 — Choose a frame" in window._drop_label.text()
+        assert "3 — Save the preview" in window._drop_label.text()
 
     def test_start_screen_shows_test_build_metadata_and_links(
         self, window: MainWindow
     ) -> None:
         info = window._start_info_label
-        assert "Тестовая сборка" in info.text()
-        assert "дата релиза не назначена" in info.text()
+        assert "Test build" in info.text()
+        assert "Release date not set" in info.text()
         assert __version__ in info.text()
         assert "Fedor Gagarin" in info.text()
         assert "LICENSE" in info.text()
@@ -143,7 +143,7 @@ class TestMainWindowVideoLoading:
             window._load_video("clip.m2ts")
         question.assert_called_once()
         assert window._conversion_dialog is None
-        assert "1 — Открой видео" in window._drop_label.text()
+        assert "1 — Open a video" in window._drop_label.text()
 
     def test_conversion_save_cancel_does_not_start_worker(self, window):
         with (

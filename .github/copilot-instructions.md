@@ -69,6 +69,7 @@ Layered, dependency-injected design — `app.py::main()` constructs concrete imp
 
 ## Conventions
 
+- Unless the user explicitly requests another language, write all text in English, including user-facing UI strings, documentation, comments, tests, and agent-authored responses.
 - Every module starts with `from __future__ import annotations` and declares `__all__`.
 - Public classes/functions get Google-style docstrings with `Args:`/`Returns:`/`Raises:` sections (see any file in `core/` or `models.py`).
 - New video container support requires touching four places: `VideoFormat` enum (`models.py`), format detection (`video_loader.py::_detect_format`), the write-dispatch format sets (`thumbnail_writer.py`), and a fixture generator entry in `tests/conftest.py`/`tests/generate_fixtures.py`.

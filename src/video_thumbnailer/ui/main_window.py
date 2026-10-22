@@ -72,16 +72,16 @@ __all__ = ["MainWindow"]
 _DROP_ZONE_MIN_HEIGHT = 200
 _START_SCREEN_TEXT = (
     "Drop a video file here or click to open\n\n"
-    "1 — Открой видео\n"
-    "2 — Выбери кадр\n"
-    "3 — Сохрани превью"
+    "1 — Open a video\n"
+    "2 — Choose a frame\n"
+    "3 — Save the preview"
 )
 _START_INFO_TEXT = (
-    f"<b>Тестовая сборка</b> · дата релиза не назначена<br>"
-    f"Версия: {__version__} · Автор: Fedor Gagarin<br>"
-    'Лицензия: <a href="https://github.com/fgagarin/video-thumbnailer/blob/main/LICENSE">'
+    f"<b>Test build</b> · Release date not set<br>"
+    f"Version: {__version__} · Author: Fedor Gagarin<br>"
+    'License: <a href="https://github.com/fgagarin/video-thumbnailer/blob/main/LICENSE">'
     "MIT</a><br>"
-    '<a href="https://fgagarin.github.io/video-thumbnailer/">Страница проекта</a>'
+    '<a href="https://fgagarin.github.io/video-thumbnailer/">Project page</a>'
     " · "
     f'<a href="https://github.com/fgagarin/video-thumbnailer/blob/main/CHANGELOG.md#unreleased">'
     f"Changelog {__version__} (Unreleased)</a>"
