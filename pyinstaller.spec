@@ -18,10 +18,10 @@ from PyInstaller.utils.hooks import collect_data_files
 with Path("pyproject.toml").open("rb") as project_file:
     project_version = tomllib.load(project_file)["project"]["version"]
 
-# Collect runtime data files for PyAV (ffmpeg dylibs) and PySide6 (Qt plugins)
+# Qt's PyInstaller hooks collect the plugins needed by the imported Qt modules.
+# Collecting all PySide6 data also pulls in unused WebEngine and QML resources.
 datas = []
 datas += collect_data_files("av")
-datas += collect_data_files("PySide6")
 datas += [("icon.png", ".")]
 
 app_icon = None

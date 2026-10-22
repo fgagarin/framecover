@@ -203,6 +203,10 @@ Or manually:
 pyinstaller pyinstaller.spec --distpath dist/linux --workpath build/linux --noconfirm
 ```
 
+Qt plugins and libraries are collected by PyInstaller's hooks for the imported
+Qt modules. Do not collect the entire `PySide6` data directory: it also bundles
+unused WebEngine, QML, and development resources.
+
 ---
 
 ## Changelog and releases
