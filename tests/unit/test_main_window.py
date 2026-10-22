@@ -99,7 +99,10 @@ class TestMainWindowConstruction:
     def test_drop_zone_visible(self, window: MainWindow) -> None:
         assert window._drop_label.isVisible()
 
-    def test_default_window_is_wide(self, window: MainWindow) -> None:
+    def test_default_window_is_wide(self, qtbot, deps) -> None:
+        # Window managers can clamp the size to the screen after show().
+        window = MainWindow(*deps)
+        qtbot.addWidget(window)
         assert window.width() >= 1200
         assert window.height() >= 700
 
@@ -363,11 +366,16 @@ class TestMainWindowVideoLoading:
         assert window._filmstrip.width() == window._timeline.width()
         left_panel = window._preview._candidate_title.parentWidget()
         right_panel = window._preview._current_title.parentWidget()
-        assert left_panel.geometry().x() < right_panel.geometry().x()
-        thumbnail_layout = window._preview._thumbnail_column.layout()
-        assert thumbnail_layout.indexOf(right_panel) < thumbnail_layout.indexOf(
-            window._apply_btn
+        assert (
+            left_panel.mapTo(window._preview, QPoint()).x()
+            < right_panel.mapTo(window._preview, QPoint()).x()
         )
+        thumbnail_layout = window._preview._thumbnail_column.layout()
+        button_row_index = thumbnail_layout.count() - 1
+        button_row = thumbnail_layout.itemAt(button_row_index).layout()
+        assert button_row is not None
+        assert button_row.indexOf(window._apply_btn) == 0
+        assert thumbnail_layout.indexOf(right_panel) < button_row_index
         assert right_panel.geometry().bottom() < window._apply_btn.geometry().top()
         assert right_panel.geometry().x() == window._apply_btn.geometry().x()
         assert abs(

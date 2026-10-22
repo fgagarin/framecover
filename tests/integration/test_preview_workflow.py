@@ -82,4 +82,5 @@ class TestPreviewWorkflow:
         assert vf.existing_thumbnail is None, "sample_video should have no thumb"
         preview.set_current_thumbnail(vf.existing_thumbnail)
         text = preview._current_label.text()
-        assert "No current thumbnail" in text
+        assert "No preview yet" in text
+        assert "Select a frame, then press Save thumbnail." in text

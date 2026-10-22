@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import av
 import pytest
 from PIL import Image, ImageChops
 
@@ -23,6 +24,30 @@ def extractor() -> PyAVFrameExtractor:
 
 
 class TestFrameExtractor:
+    @pytest.mark.parametrize("offset_ms", [0, 40, 2500, 5000])
+    def test_threaded_seek_matches_sequential_decode(
+        self,
+        loader: PyAVVideoLoader,
+        extractor: PyAVFrameExtractor,
+        sample_video: Path,
+        offset_ms: int,
+    ) -> None:
+        video = loader.load(str(sample_video))
+        with av.open(str(sample_video)) as container:
+            stream = container.streams.video[0]
+            stream.codec_context.thread_count = 1
+            frames = list(container.decode(stream))
+            nearest = min(
+                frames, key=lambda frame: abs(frame.time - offset_ms / 1000)
+            )
+            expected = nearest.to_image().convert("RGB")
+
+        actual = extractor.extract(video, TimelinePosition(offset_ms=offset_ms))
+
+        assert actual.mode == expected.mode
+        assert actual.size == expected.size
+        assert ImageChops.difference(actual, expected).getbbox() is None
+
     def test_extract_at_adjacent_positions_returns_adjacent_frames(
         self,
         loader: PyAVVideoLoader,

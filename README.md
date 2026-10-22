@@ -142,6 +142,9 @@ pytest --cov=video_thumbnailer \
 pytest tests/benchmarks/ --benchmark-only
 ```
 
+The benchmarks enforce a 500 ms maximum per extraction for SD, 1080p, and 4K.
+Frame extraction uses up to four decoder threads to accelerate seeking.
+
 ### Via Makefile
 
 ```bash

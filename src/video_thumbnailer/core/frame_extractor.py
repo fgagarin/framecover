@@ -51,6 +51,9 @@ class PyAVFrameExtractor:
                 )
 
             stream = playable[0]
+            # Frame threading accelerates long-GOP seeks; bound decoder memory.
+            stream.thread_type = "AUTO"
+            stream.codec_context.thread_count = 4
             # Seek to the target timestamp.  offset is in AV_TIME_BASE units
             # (microseconds) when no stream is given, which is what we want.
             target_us = int(position.offset_ms * 1000)

@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 from PIL import Image
-from PySide6.QtCore import QSize
+from PySide6.QtCore import QPoint, QSize
 from PySide6.QtWidgets import QMessageBox
 
 from video_thumbnailer.ui.preview_widget import PreviewWidget
@@ -83,8 +83,8 @@ class TestPreviewWidget:
         assert preview._current_label is not None
         assert preview._candidate_label is not None
         assert (
-            preview._candidate_title.parentWidget().geometry().x()
-            < preview._current_title.parentWidget().geometry().x()
+            preview._candidate_panel.mapTo(preview, QPoint()).x()
+            < preview._current_panel.mapTo(preview, QPoint()).x()
         )
 
     def test_set_current_thumbnail_none_shows_placeholder(
