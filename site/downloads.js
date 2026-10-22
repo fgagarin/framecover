@@ -9,7 +9,7 @@ async function loadDownloads() {
       { headers: { Accept: "application/vnd.github+json" }, signal: AbortSignal.timeout(8000) },
     );
     if (response.status === 404) {
-      status.textContent = "Стабильный релиз ещё не опубликован. Сборки появятся на GitHub после первого релиза.";
+      status.textContent = "No stable release has been published yet. Builds will be available on GitHub after the first release.";
       return;
     }
     if (!response.ok) throw new Error("Release unavailable");
@@ -31,10 +31,10 @@ async function loadDownloads() {
       resolved += 1;
     }
     status.textContent = resolved === 3
-      ? `Последний стабильный релиз: ${release.tag_name}. Кнопки скачивают сборку для выбранной ОС.`
-      : "Некоторые сборки пока недоступны. Соответствующая кнопка откроет страницу последнего релиза.";
+      ? `Latest stable release: ${release.tag_name}. The buttons download the build for your chosen OS.`
+      : "Some builds are not available yet. Their buttons will open the latest release page.";
   } catch {
-    status.textContent = "Не удалось проверить файлы релиза. Кнопки откроют последний стабильный релиз на GitHub — выберите сборку для своей ОС.";
+    status.textContent = "Could not check the release files. The buttons will open the latest stable release on GitHub — choose the build for your OS.";
   }
 }
 

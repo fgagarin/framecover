@@ -246,7 +246,7 @@ tests/
 
 ## Landing page (GitHub Pages)
 
-The Russian-language landing page is published at
+The English-language landing page is published at
 <https://fgagarin.github.io/video-thumbnailer/>. Its dependency-free HTML, CSS and
 JavaScript live in `site/`; screenshots and the icon are reused from the repository
 root. No frontend build or package installation is required.
