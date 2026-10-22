@@ -109,6 +109,12 @@ original stays open for frame selection, so saving again does not accumulate
 inserted preview frames. Container limitations still apply: formats without
 embedded cover art rely on the platform's thumbnail-cache support.
 
+On filesystems without hard-link support (such as FAT/exFAT), a new copy becomes
+visible while its bytes are being written. An interrupted write may leave an
+incomplete copy, but does not overwrite an existing file. If another application
+changes the destination during a save, recovery backups are retained whenever
+they cannot be restored safely; any recovery paths are included in the error.
+
 ### Convert other formats to MP4
 
 Opening an unsupported video container (for example M2TS, MTS, or MPEG-TS)

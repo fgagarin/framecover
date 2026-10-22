@@ -133,9 +133,15 @@ def test_refuses_source_aliases(setup_copy, alias, overwrite):
     elif alias == "relative":
         destination = source.parent / "." / source.name
     elif alias == "hardlink":
-        destination.hardlink_to(source)
+        try:
+            destination.hardlink_to(source)
+        except (OSError, NotImplementedError) as exc:
+            pytest.skip(f"Filesystem does not permit hardlink creation: {exc}")
     else:
-        destination.symlink_to(source)
+        try:
+            destination.symlink_to(source)
+        except (OSError, NotImplementedError) as exc:
+            pytest.skip(f"Platform does not permit symlink creation: {exc}")
     result = service.save_copy(
         writer, video, thumbnail, str(destination), overwrite=overwrite,
     )
@@ -207,3 +213,237 @@ def test_elapsed_includes_hash_and_copy(setup_copy, monkeypatch):
     times = iter([10.0, 12.5])
     monkeypatch.setattr(service.time, "monotonic", lambda: next(times))
     assert _save(setup_copy).elapsed_ms == 2500
+
+
+def test_progress_starts_before_hashing_and_copying(setup_copy, monkeypatch):
+    events = []
+    original_digest = service._digest
+    original_copy = service.shutil.copyfile
+
+    def digest(path):
+        assert events[-1][1] is None
+        assert events[-1][0] in {
+            "Verifying source and destination",
+            "Copying source video",
+            "Verifying saved copy",
+        }
+        return original_digest(path)
+
+    def copy(*args):
+        assert events[-1] == ("Copying source video", None)
+        return original_copy(*args)
+
+    monkeypatch.setattr(service, "_digest", digest)
+    monkeypatch.setattr(service.shutil, "copyfile", copy)
+    assert _save(
+        setup_copy, on_progress=lambda name, elapsed: events.append((name, elapsed)),
+    ).success
+    assert [name for name, elapsed in events if elapsed is None] == [
+        "Verifying source and destination",
+        "Copying source video",
+        "Verifying saved copy",
+    ]
+    assert all(elapsed >= 0 for _, elapsed in events if elapsed is not None)
+
+
+@pytest.mark.parametrize(
+    "failure", [OSError(errno.EOPNOTSUPP, "Hard links unsupported"), NotImplementedError()],
+)
+def test_unsupported_hardlinks_use_exclusive_copy(setup_copy, monkeypatch, failure):
+    source, destination, _, _, _ = setup_copy
+
+    def unsupported(*args, **kwargs):
+        raise failure
+
+    monkeypatch.setattr(service.os, "link", unsupported)
+    result = _save(setup_copy)
+    assert result.success
+    assert result.output_path == str(destination)
+    assert destination.read_bytes() == b"modified video contents"
+    assert source.read_bytes() == b"original video contents"
+    assert _save(setup_copy).success
+    assert len(list(source.parent.iterdir())) == 3
+
+
+def test_unsupported_hardlinks_still_refuse_racing_destination(setup_copy, monkeypatch):
+    _, destination, _, _, _ = setup_copy
+
+    def unsupported(*args, **kwargs):
+        destination.write_bytes(b"racing output")
+        raise OSError(errno.EOPNOTSUPP, "Hard links are not supported")
+
+    monkeypatch.setattr(service.os, "link", unsupported)
+    result = _save(setup_copy)
+    assert result.error_code is ApplyError.DESTINATION_EXISTS
+    assert destination.read_bytes() == b"racing output"
+
+
+def test_exclusive_copy_failure_retains_and_reports_partial_output(setup_copy, monkeypatch):
+    source, destination, _, _, _ = setup_copy
+
+    def unsupported(*args, **kwargs):
+        raise OSError(errno.EOPNOTSUPP, "Hard links are not supported")
+
+    def failed_copy(original, output):
+        output.write(b"partial")
+        raise OSError(errno.ENOSPC, "disk full")
+
+    monkeypatch.setattr(service.os, "link", unsupported)
+    monkeypatch.setattr(service.shutil, "copyfileobj", failed_copy)
+    result = _save(setup_copy)
+    assert result.error_code is ApplyError.DISK_FULL
+    assert destination.read_bytes() == b"partial"
+    assert str(destination) in result.error_message
+    assert source.read_bytes() == b"original video contents"
+
+
+def test_exclusive_copy_failure_preserves_racing_replacement(setup_copy, monkeypatch):
+    _, destination, _, _, _ = setup_copy
+
+    def unsupported(*args, **kwargs):
+        raise OSError(errno.EOPNOTSUPP, "Hard links are not supported")
+
+    def failed_copy(original, output):
+        replacement = destination.with_suffix(".racing")
+        replacement.write_bytes(b"racing output")
+        output.close()
+        replacement.replace(destination)
+        raise OSError(errno.ENOSPC, "disk full")
+
+    monkeypatch.setattr(service.os, "link", unsupported)
+    monkeypatch.setattr(service.shutil, "copyfileobj", failed_copy)
+    assert not _save(setup_copy).success
+    assert destination.read_bytes() == b"racing output"
+
+
+def test_exclusive_copy_failure_never_unlinks_destination(setup_copy, monkeypatch):
+    _, destination, _, _, _ = setup_copy
+    unlink = Path.unlink
+
+    def unsupported(*args, **kwargs):
+        raise OSError(errno.EOPNOTSUPP, "Hard links are not supported")
+
+    def failed_copy(original, output):
+        output.write(b"partial")
+        raise OSError(errno.ENOSPC, "disk full")
+
+    def guard_unlink(path, *args, **kwargs):
+        assert path != destination, "Unsafe pathname cleanup of a shared destination"
+        return unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(service.os, "link", unsupported)
+    monkeypatch.setattr(service.shutil, "copyfileobj", failed_copy)
+    monkeypatch.setattr(Path, "unlink", guard_unlink)
+    result = _save(setup_copy)
+    assert result.error_code is ApplyError.DISK_FULL
+    assert destination.read_bytes() == b"partial"
+
+
+def test_replacement_during_captured_digest_is_not_clobbered(setup_copy, monkeypatch):
+    _, destination, _, _, _ = setup_copy
+    assert _save(setup_copy).success
+    original_digest = service._digest
+
+    def racing_digest(path):
+        value = original_digest(path)
+        if ".backup-" in str(path.parent):
+            destination.write_bytes(b"racing unrelated output")
+        return value
+
+    monkeypatch.setattr(service, "_digest", racing_digest)
+    result = _save(setup_copy)
+    assert result.error_code is ApplyError.DESTINATION_EXISTS
+    assert destination.read_bytes() == b"racing unrelated output"
+    assert "Previous destination retained at:" in result.error_message
+    backups = list(destination.parent.glob(".*.backup-*/*"))
+    assert len(backups) == 1
+    assert backups[0].read_bytes() == b"modified video contents"
+    assert str(backups[0]) in result.error_message
+
+
+def test_unrelated_capture_is_restored_on_digest_mismatch(setup_copy, monkeypatch):
+    _, destination, _, _, _ = setup_copy
+    assert _save(setup_copy).success
+    original_replace = service.os.replace
+
+    def racing_replace(source, target):
+        if ".backup-" in str(Path(target).parent):
+            destination.write_bytes(b"unrelated replacement")
+        return original_replace(source, target)
+
+    monkeypatch.setattr(service.os, "replace", racing_replace)
+    result = _save(setup_copy)
+    assert result.error_code is ApplyError.DESTINATION_EXISTS
+    assert destination.read_bytes() == b"unrelated replacement"
+    assert not list(destination.parent.glob(".*.backup-*"))
+
+
+def test_verified_backup_restored_when_publish_fails(setup_copy, monkeypatch):
+    _, destination, _, _, _ = setup_copy
+    assert _save(setup_copy).success
+    original_publish = service._publish_exclusive
+
+    def failed_publish(source, target):
+        if ".save-" in source.name:
+            raise OSError(errno.ENOSPC, "disk full")
+        return original_publish(source, target)
+
+    monkeypatch.setattr(service, "_publish_exclusive", failed_publish)
+    result = _save(setup_copy)
+    assert result.error_code is ApplyError.DISK_FULL
+    assert destination.read_bytes() == b"modified video contents"
+    assert not list(destination.parent.glob(".*.backup-*"))
+
+
+def test_interrupted_fallback_copy_preserves_previous_backup(setup_copy, monkeypatch):
+    source, destination, _, _, _ = setup_copy
+    assert _save(setup_copy).success
+
+    def unsupported(*args, **kwargs):
+        raise OSError(errno.EOPNOTSUPP, "Hard links are not supported")
+
+    def failed_copy(original, output):
+        output.write(b"partial")
+        raise OSError(errno.ENOSPC, "disk full")
+
+    monkeypatch.setattr(service.os, "link", unsupported)
+    monkeypatch.setattr(service.shutil, "copyfileobj", failed_copy)
+    result = _save(setup_copy)
+    assert result.error_code is ApplyError.DISK_FULL
+    assert destination.read_bytes() == b"partial"
+    assert str(destination) in result.error_message
+    backups = list(destination.parent.glob(".*.backup-*/*"))
+    assert len(backups) == 1
+    assert backups[0].read_bytes() == b"modified video contents"
+    assert str(backups[0]) in result.error_message
+    assert source.read_bytes() == b"original video contents"
+
+
+def test_unrelated_capture_retained_when_racer_blocks_restoration(
+    setup_copy, monkeypatch,
+):
+    _, destination, _, _, _ = setup_copy
+    assert _save(setup_copy).success
+    original_replace = service.os.replace
+    original_digest = service._digest
+
+    def racing_replace(source, target):
+        if ".backup-" in str(Path(target).parent):
+            destination.write_bytes(b"first unrelated replacement")
+        return original_replace(source, target)
+
+    def racing_digest(path):
+        value = original_digest(path)
+        if ".backup-" in str(path.parent):
+            destination.write_bytes(b"second unrelated replacement")
+        return value
+
+    monkeypatch.setattr(service.os, "replace", racing_replace)
+    monkeypatch.setattr(service, "_digest", racing_digest)
+    result = _save(setup_copy)
+    assert result.error_code is ApplyError.DESTINATION_EXISTS
+    assert destination.read_bytes() == b"second unrelated replacement"
+    backups = list(destination.parent.glob(".*.backup-*/*"))
+    assert len(backups) == 1
+    assert backups[0].read_bytes() == b"first unrelated replacement"
+    assert str(backups[0]) in result.error_message
