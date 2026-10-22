@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Video Thumbnailer — выберите красивый кадр вместо случайной обложки видео. Приложение для Windows, macOS и Linux.">
+  <meta name="theme-color" content="#10151f">
+  <title>Video Thumbnailer — ваш кадр на обложке</title>
+  <link rel="icon" href="icon.png" type="image/png">
+  <link rel="stylesheet" href="styles.css">
+  <script src="downloads.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Перейти к содержимому</a>
+  <header class="container header">
+    <a class="brand" href="#main"><img src="icon.png" width="36" height="36" alt="">Video Thumbnailer</a>
+    <nav aria-label="Основная навигация">
+      <a href="#features">Возможности</a>
+      <a href="#download">Скачать</a>
+      <a href="https://github.com/fgagarin/video-thumbnailer">GitHub ↗</a>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="container hero" aria-labelledby="hero-title">
+      <div>
+        <p class="eyebrow">Маленькая деталь. Большая разница.</p>
+        <h1 id="hero-title">Ваше видео.<br>Ваш <span>лучший кадр.</span></h1>
+        <p class="lead">Чёрный экран или случайная заставка на обложке? Выберите кадр, который действительно рассказывает о видео, и сделайте его миниатюрой.</p>
+        <div class="hero-actions">
+          <a class="button primary" href="#download">Скачать приложение <span aria-hidden="true">↓</span></a>
+          <a class="text-link" href="#how-it-works">Как это работает <span aria-hidden="true">↗</span></a>
+        </div>
+        <p class="muted">Windows · macOS · Linux<br>Работает локально — без загрузки видео в облако.</p>
+      </div>
+      <figure class="app-preview">
+        <div class="preview-label"><span class="status-dot"></span> От случайной обложки — к осознанному выбору</div>
+        <img src="application.png" width="502" height="532" alt="Окно Video Thumbnailer: выбор кадра на шкале времени и предпросмотр новой миниатюры" fetchpriority="high">
+        <figcaption>Найдите нужный момент. Остальное — один клик.</figcaption>
+      </figure>
+    </section>
+
+    <section class="container section" aria-labelledby="comparison-title">
+      <p class="eyebrow">Результат на виду</p>
+      <h2 id="comparison-title">Узнавайте видео с первого взгляда</h2>
+      <p class="section-intro">Вместо невыразительной миниатюры — выбранный вами момент.</p>
+      <div class="comparison">
+        <figure class="image-card">
+          <figcaption><span class="pill">До</span> Случайная миниатюра</figcaption>
+          <img src="before.png" width="366" height="369" alt="Видео в файловом менеджере до изменения миниатюры" loading="lazy">
+        </figure>
+        <figure class="image-card after">
+          <figcaption><span class="pill">После</span> Кадр, который вы выбрали</figcaption>
+          <img src="after.png" width="366" height="369" alt="То же видео в файловом менеджере с новой миниатюрой" loading="lazy">
+        </figure>
+      </div>
+      <p class="muted">Отображение обложки зависит от формата видео, файлового менеджера и его кэша.</p>
+    </section>
+
+    <section class="container section" id="features" aria-labelledby="features-title">
+      <p class="eyebrow">Всё нужное, ничего лишнего</p>
+      <h2 id="features-title">Один инструмент. Правильная обложка.</h2>
+      <div class="features">
+        <article class="feature"><span class="feature-icon" aria-hidden="true">01</span><h3>Точный выбор кадра</h3><p>Перемещайтесь по шкале времени и смотрите предпросмотр, прежде чем применить новую миниатюру.</p></article>
+        <article class="feature"><span class="feature-icon" aria-hidden="true">02</span><h3>Популярные форматы</h3><p>Открывайте MP4, MOV, MKV, WebM, AVI и FLV. Способ сохранения миниатюры зависит от контейнера.</p></article>
+        <article class="feature"><span class="feature-icon" aria-hidden="true">03</span><h3>Конвертация в MP4</h3><p>Для других контейнеров приложение предложит создать отдельный MP4. Исходный файл останется нетронутым.</p></article>
+        <article class="feature"><span class="feature-icon" aria-hidden="true">04</span><h3>Локальная обработка</h3><p>Видео обрабатывается на вашем компьютере. Не нужно отправлять файлы на сервер или создавать аккаунт.</p></article>
+        <article class="feature"><span class="feature-icon" aria-hidden="true">05</span><h3>Безопасное сохранение</h3><p>Изменения записываются через временный файл с последующей заменой: ошибка записи не оставит исходное видео повреждённым.</p></article>
+        <article class="feature"><span class="feature-icon" aria-hidden="true">06</span><h3>Три платформы</h3><p>Одинаковый понятный процесс на Windows, macOS и Linux. Готовые сборки публикуются на GitHub.</p></article>
+      </div>
+      <p class="muted">Не все контейнеры поддерживают встроенную обложку. Для FLV и WebM используется миниатюра в XDG-кэше там, где он поддерживается; результат не универсален для всех ОС и плееров.</p>
+    </section>
+
+    <section class="container section" id="how-it-works" aria-labelledby="steps-title">
+      <p class="eyebrow">Три простых шага</p>
+      <h2 id="steps-title">От файла до новой миниатюры</h2>
+      <ol class="steps">
+        <li><h3>Откройте видео</h3><p>Выберите файл на компьютере.</p></li>
+        <li><h3>Найдите момент</h3><p>Переместите ползунок к нужному кадру и проверьте предпросмотр.</p></li>
+        <li><h3>Примените обложку</h3><p>Нажмите Apply Thumbnail, чтобы сохранить выбранную миниатюру.</p></li>
+      </ol>
+    </section>
+
+    <section class="container section download" id="download" aria-labelledby="download-title">
+      <p class="eyebrow">Начните с хорошего кадра</p>
+      <h2 id="download-title">Скачать Video Thumbnailer</h2>
+      <p class="section-intro">Последний стабильный релиз — прямо с GitHub. Выберите свою платформу.</p>
+      <div class="downloads">
+        <article class="download-card"><h3>Windows</h3><p>Готовое приложение · .exe</p><a class="button" data-platform="windows" href="https://github.com/fgagarin/video-thumbnailer/releases/latest">Скачать для Windows <span aria-hidden="true">↓</span></a></article>
+        <article class="download-card"><h3>macOS</h3><p>Приложение .app · .tar.gz</p><a class="button" data-platform="macos" href="https://github.com/fgagarin/video-thumbnailer/releases/latest">Скачать для macOS <span aria-hidden="true">↓</span></a></article>
+        <article class="download-card"><h3>Linux</h3><p>Исполняемый файл · .tar.gz</p><a class="button" data-platform="linux" href="https://github.com/fgagarin/video-thumbnailer/releases/latest">Скачать для Linux <span aria-hidden="true">↓</span></a></article>
+      </div>
+      <p class="muted" id="release-status" role="status">Ссылки ведут на последний стабильный релиз. Требования и сведения о сборках — в описании релиза.</p>
+      <noscript><p class="muted">JavaScript отключён: кнопки откроют последний релиз, где можно выбрать файл для своей ОС.</p></noscript>
+      <a class="text-link" href="https://github.com/fgagarin/video-thumbnailer/releases">Все релизы и история изменений ↗</a>
+    </section>
+  </main>
+
+  <footer class="container footer">
+    <span>Video Thumbnailer — обложка имеет значение.</span>
+    <a href="https://github.com/fgagarin/video-thumbnailer#readme">Документация ↗</a>
+    <a href="https://github.com/fgagarin/video-thumbnailer/issues">Сообщить о проблеме ↗</a>
+  </footer>
+</body>
+</html>

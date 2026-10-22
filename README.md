@@ -244,6 +244,30 @@ tests/
 
 ---
 
+## Landing page (GitHub Pages)
+
+The Russian-language landing page is published at
+<https://fgagarin.github.io/video-thumbnailer/>. Its dependency-free HTML, CSS and
+JavaScript live in `site/`; screenshots and the icon are reused from the repository
+root. No frontend build or package installation is required.
+
+In **Settings → Pages → Build and deployment**, select **GitHub Actions** as the
+source (one-time repository setup). The `Deploy landing page` workflow publishes
+on pushes to `main` only when `site/**`, the referenced images, or the workflow
+itself change. It can also be run manually from the Actions tab on `main`.
+
+The download buttons resolve versioned platform assets through GitHub's public
+`releases/latest` API, so new releases do not require a site rebuild. If JavaScript
+is disabled, the API is unavailable, or an asset is missing, the buttons fall back
+to the latest release page. Downloads become available after the first stable
+release is published.
+
+To preview locally, copy the contents of `site/` and the root `application.png`,
+`before.png`, `after.png`, and `icon.png` into one temporary directory, then serve
+that directory with `python -m http.server`.
+
+---
+
 ## Code quality
 
 ```bash
