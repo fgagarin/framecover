@@ -36,10 +36,12 @@ from PySide6.QtGui import (
     QTextOption,
 )
 from PySide6.QtWidgets import (
+    QCheckBox,
     QFileDialog,
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QProgressDialog,
     QStyle,
@@ -50,7 +52,7 @@ from PySide6.QtWidgets import (
 
 from video_thumbnailer import __version__
 from video_thumbnailer.core.video_converter import FFmpegVideoConverter
-from video_thumbnailer.models import ApplyResult, TimelinePosition, VideoFile
+from video_thumbnailer.models import ApplyError, ApplyResult, TimelinePosition, VideoFile
 from video_thumbnailer.ui.filmstrip_widget import FilmstripWidget
 from video_thumbnailer.ui.preview_widget import PreviewWidget
 from video_thumbnailer.ui.timeline_widget import TimelineWidget
@@ -165,6 +167,9 @@ class MainWindow(QMainWindow):
         self._video: VideoFile | None = None
         self._current_frame: Image.Image | None = None
         self._current_frame_position_ms: int | None = None
+        self._saving = False
+        self._copy_destination: Path | None = None
+        self._skip_overwrite_warning = False
         self._frame_extract_active = False
         self._frame_extract_target_ms: int | None = None
         self._pool = QThreadPool.globalInstance()
@@ -273,6 +278,10 @@ class MainWindow(QMainWindow):
         self._apply_btn = self._preview.apply_button
         self._apply_btn.setEnabled(False)
         self._apply_btn.clicked.connect(self._on_apply_clicked)
+        save_menu = QMenu(self._apply_btn)
+        save_menu.addAction("Save a copy", self._on_apply_clicked)
+        save_menu.addAction("Overwrite original…", self._on_overwrite_clicked)
+        self._apply_btn.setMenu(save_menu)
         self._save_icon = self._apply_btn.icon()
         layout.addWidget(self._preview)
 
@@ -326,6 +335,8 @@ class MainWindow(QMainWindow):
         self._shortcuts = [open_shortcut, save_shortcut, help_shortcut]
 
     def _open_file_dialog(self, checked: bool = False) -> None:
+        if self._saving:
+            return
         path, _ = QFileDialog.getOpenFileName(
             self,
             "Open video",
@@ -336,7 +347,7 @@ class MainWindow(QMainWindow):
             self._load_video(path)
 
     def _load_video(self, path: str) -> None:
-        if self._conversion_dialog is not None:
+        if self._conversion_dialog is not None or self._saving:
             return
         directory = str(Path(path).parent)
         self._last_open_directory = directory
@@ -351,7 +362,7 @@ class MainWindow(QMainWindow):
         self._pool.start(worker)
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
-        if self._conversion_dialog is not None:
+        if self._conversion_dialog is not None or self._saving:
             event.ignore()
             return
         super().closeEvent(event)
@@ -417,6 +428,7 @@ class MainWindow(QMainWindow):
     def _on_video_loaded(self, video: VideoFile) -> None:
         self.resize(1280, 720)
         self._video = video
+        self._copy_destination = None
         self._current_frame = None
         self._current_frame_position_ms = None
         self._drop_label.setText(
@@ -461,7 +473,7 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _on_scrub(self, offset_ms: int) -> None:
-        if self._video is None:
+        if self._video is None or self._saving:
             return
         self._filmstrip.set_selected_position(offset_ms)
         if self._frame_extract_active:
@@ -478,7 +490,7 @@ class MainWindow(QMainWindow):
         self._pool.start(worker)
 
     def _step_selected_frame(self, direction: int) -> None:
-        if self._video is None:
+        if self._video is None or self._saving:
             return
 
         current_ms = self._timeline.current_position_ms()
@@ -491,6 +503,8 @@ class MainWindow(QMainWindow):
         self._on_scrub(next_ms)
 
     def _on_filmstrip_position_selected(self, offset_ms: int) -> None:
+        if self._saving:
+            return
         self._timeline.set_position(offset_ms)
         self._on_scrub(offset_ms)
 
@@ -532,20 +546,56 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _on_apply_clicked(self) -> None:
-        if self._video is None or self._current_frame is None:
+        if self._video is None or self._current_frame is None or self._saving:
             return
 
-        if self._video.existing_thumbnail is not None:
-            answer = QMessageBox.question(
-                self,
-                "Overwrite existing thumbnail?",
-                "This video already has an embedded thumbnail. Overwrite it?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No,
+        if self._copy_destination is None:
+            source = Path(self._video.path)
+            self._copy_destination = source.with_name(
+                f"{source.stem}-thumbnail{source.suffix}"
             )
-            if answer != QMessageBox.StandardButton.Yes:
-                return
+        self._start_apply(destination=str(self._copy_destination))
 
+    def _on_overwrite_clicked(self) -> None:
+        if self._video is None or self._current_frame is None or self._saving:
+            return
+        if not self._skip_overwrite_warning:
+            dialog = QMessageBox(self)
+            dialog.setWindowTitle("Overwrite original video?")
+            dialog.setIcon(QMessageBox.Icon.Warning)
+            dialog.setText(
+                "The program may damage the original video file.\n\n"
+                "If you are unsure or have not tested the program on similar files, "
+                "save a copy instead."
+            )
+            save_copy = dialog.addButton(
+                "Save a copy", QMessageBox.ButtonRole.AcceptRole
+            )
+            overwrite = dialog.addButton(
+                "Overwrite", QMessageBox.ButtonRole.DestructiveRole
+            )
+            dialog.addButton(QMessageBox.StandardButton.Cancel)
+            checkbox = QCheckBox(
+                "Do not show this warning until the program restarts", dialog
+            )
+            dialog.setCheckBox(checkbox)
+            dialog.setDefaultButton(save_copy)
+            dialog.exec()
+            clicked = dialog.clickedButton()
+            if clicked not in (save_copy, overwrite):
+                return
+            self._skip_overwrite_warning = checkbox.isChecked()
+            if clicked == save_copy:
+                self._on_apply_clicked()
+                return
+        self._start_apply()
+
+    def _start_apply(
+        self, *, destination: str | None = None, overwrite: bool = False
+    ) -> None:
+        if self._video is None or self._current_frame is None or self._saving:
+            return
+        self._saving = True
         self._start_save_state()
         self._set_busy(True)
 
@@ -555,6 +605,8 @@ class MainWindow(QMainWindow):
             self._video,
             self._current_frame,
             self._current_frame_position_ms,
+            destination=destination,
+            overwrite=overwrite,
         )
         worker.signals.finished.connect(self._on_apply_done)
         worker.signals.error.connect(self._on_apply_error)
@@ -562,11 +614,21 @@ class MainWindow(QMainWindow):
         self._pool.start(worker)
 
     def _on_apply_done(self, result: ApplyResult) -> None:
+        self._saving = False
         self._set_busy(False)
         self._finish_save_state()
 
+        if result.error_code == ApplyError.DESTINATION_EXISTS:
+            self._resolve_copy_conflict()
+            return
+
         if result.success:
             self._preview.set_last_save_duration(result.elapsed_ms / 1000)
+            if result.output_path is not None:
+                # Keep editing the source so repeated saves do not prepend previews.
+                self._preview.set_current_thumbnail(self._current_frame)
+                self._apply_btn.setToolTip(f"Saved copy: {result.output_path}")
+                return
             # Update the cached existing_thumbnail so subsequent confirmation dialogs
             # reflect reality and the Linux XDG writer has the right image.
             if self._video is not None and self._current_frame is not None:
@@ -616,7 +678,38 @@ class MainWindow(QMainWindow):
                 result.error_message or "An unknown error occurred.",
             )
 
+    def _resolve_copy_conflict(self) -> None:
+        if self._copy_destination is None:
+            return
+        dialog = QMessageBox(self)
+        dialog.setWindowTitle("Copy already exists")
+        dialog.setIcon(QMessageBox.Icon.Warning)
+        dialog.setTextFormat(Qt.TextFormat.PlainText)
+        dialog.setText(
+            f"'{self._copy_destination}' already exists and could not be verified "
+            "as a saved copy of this video.\n\n"
+            "Overwrite it or add another suffix to save a separate copy?"
+        )
+        another = dialog.addButton(
+            "Add another suffix", QMessageBox.ButtonRole.AcceptRole
+        )
+        overwrite = dialog.addButton(
+            "Overwrite", QMessageBox.ButtonRole.DestructiveRole
+        )
+        dialog.addButton(QMessageBox.StandardButton.Cancel)
+        dialog.setDefaultButton(another)
+        dialog.exec()
+        if dialog.clickedButton() == overwrite:
+            self._start_apply(destination=str(self._copy_destination), overwrite=True)
+        elif dialog.clickedButton() == another:
+            destination = self._copy_destination
+            self._copy_destination = destination.with_name(
+                f"{destination.stem}-thumbnail{destination.suffix}"
+            )
+            self._on_apply_clicked()
+
     def _on_apply_error(self, message: str) -> None:
+        self._saving = False
         self._set_busy(False)
         self._finish_save_state()
         self._preview.set_last_save_duration(None)

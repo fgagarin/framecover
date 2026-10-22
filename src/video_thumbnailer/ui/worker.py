@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import time
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from PIL import Image
 from PySide6.QtCore import QObject, QRunnable, Signal, Slot
 
+from video_thumbnailer.core.save_copy import save_copy
 from video_thumbnailer.exceptions import UnsupportedFormatError
 from video_thumbnailer.models import TimelinePosition, VideoFile
 
@@ -155,6 +157,9 @@ class ApplyWorker(QRunnable):
         video: VideoFile,
         thumbnail: Image.Image,
         position_ms: int | None = None,
+        *,
+        destination: str | None = None,
+        overwrite: bool = False,
     ) -> None:
         super().__init__()
         self._writer = writer
@@ -162,21 +167,37 @@ class ApplyWorker(QRunnable):
         self._video = video
         self._thumbnail = thumbnail
         self._position_ms = position_ms
+        self._destination = destination
+        self._overwrite = overwrite
         self.signals = _ApplySignals()
 
     @Slot()
     def run(self) -> None:
         try:
-            result = self._writer.write(
-                self._video,
-                self._thumbnail,
-                position_ms=self._position_ms,
-                on_progress=self.signals.progress.emit,
-            )
+            if self._destination is None:
+                result = self._writer.write(
+                    self._video,
+                    self._thumbnail,
+                    position_ms=self._position_ms,
+                    on_progress=self.signals.progress.emit,
+                )
+            else:
+                result = save_copy(
+                    self._writer, self._video, self._thumbnail, self._destination,
+                    overwrite=self._overwrite,
+                    position_ms=self._position_ms,
+                    on_progress=self.signals.progress.emit,
+                )
             if result.success:
                 started = time.monotonic()
                 self.signals.progress.emit("Refreshing thumbnail cache", None)
-                self._invalidator.invalidate(self._video)
+                self._invalidator.invalidate(
+                    replace(
+                        self._video,
+                        path=result.output_path or self._video.path,
+                        existing_thumbnail=self._thumbnail,
+                    )
+                )
                 self.signals.progress.emit(
                     "Refreshing thumbnail cache", time.monotonic() - started
                 )

@@ -11,7 +11,7 @@ from PIL import Image
 from PySide6.QtCore import QPoint, QSettings, Qt
 from PySide6.QtGui import QCloseEvent, QKeySequence
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QFileDialog, QMessageBox
+from PySide6.QtWidgets import QFileDialog, QMessageBox, QToolButton
 
 from video_thumbnailer import __version__
 from video_thumbnailer.core.frame_extractor import PyAVFrameExtractor
@@ -598,9 +598,11 @@ class TestMainWindowApplyThumbnail:
         assert window._preview._current_label.isVisible()
 
     def test_apply_progress_arrives_while_worker_is_running(
-        self, window: MainWindow, qtbot
+        self, window: MainWindow, qtbot, tmp_path
     ) -> None:
-        window._on_video_loaded(_make_vf())
+        source = tmp_path / "video.mp4"
+        source.write_bytes(b"video")
+        window._on_video_loaded(_make_vf(str(source)))
         window._current_frame = Image.new("RGB", (32, 32))
         release = Event()
 
@@ -671,16 +673,19 @@ class TestMainWindowApplyThumbnail:
         # Should return early since no frame
         window._on_apply_clicked()
 
-    def test_on_apply_clicked_with_existing_thumb_prompts(self, window: MainWindow) -> None:
-        """When video has existing thumbnail, user is prompted to confirm overwrite."""
+    def test_copy_with_existing_thumbnail_does_not_prompt(self, window: MainWindow) -> None:
         vf = _make_vf(with_thumb=True)
         window._on_video_loaded(vf)
         window._current_frame = Image.new("RGB", (32, 32))
 
-        # Simulate user clicking "No" on the confirmation dialog
-        with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.No):
+        with (
+            patch.object(QMessageBox, "question") as question,
+            patch.object(window._pool, "start") as start,
+        ):
             window._on_apply_clicked()
-        # Apply should have been cancelled — no worker running
+        question.assert_not_called()
+        start.assert_called_once()
+        assert start.call_args.args[0]._destination == "/fake/video-thumbnail.mp4"
 
     def test_set_busy_disables_controls(self, window: MainWindow) -> None:
         vf = _make_vf()
@@ -691,6 +696,128 @@ class TestMainWindowApplyThumbnail:
         window._set_busy(True)
         assert not window._apply_btn.isEnabled()
         assert not window._timeline.isEnabled()
+
+
+class TestCopySaveChoices:
+    @pytest.fixture(autouse=True)
+    def selected_frame(self, window):
+        window._on_video_loaded(_make_vf())
+        window._current_frame = Image.new("RGB", (32, 32))
+        window._current_frame_position_ms = 1000
+
+    @staticmethod
+    def _choose(monkeypatch, text, *, suppress=False):
+        def execute(dialog):
+            if dialog.checkBox() is not None:
+                dialog.checkBox().setChecked(suppress)
+            for button in dialog.buttons():
+                if button.text() == text:
+                    button.click()
+                    return 0
+            raise AssertionError(f"No dialog button {text!r}")
+
+        monkeypatch.setattr(QMessageBox, "exec", execute)
+
+    def test_split_button_offers_both_modes(self, window):
+        assert window._apply_btn.popupMode() == QToolButton.ToolButtonPopupMode.MenuButtonPopup
+        assert [action.text() for action in window._apply_btn.menu().actions()] == [
+            "Save a copy", "Overwrite original…"
+        ]
+
+    def test_default_saves_copy_and_rejects_repeated_start(self, window):
+        with patch.object(window._pool, "start") as start:
+            window._on_apply_clicked()
+            window._on_apply_clicked()
+            window._on_overwrite_clicked()
+            window._load_video("other.mp4")
+        start.assert_called_once()
+        assert start.call_args.args[0]._destination == "/fake/video-thumbnail.mp4"
+        assert not start.call_args.args[0]._overwrite
+        assert window._video.path == "/fake/video.mp4"
+
+    @pytest.mark.parametrize("choice", ["Save a copy", "Overwrite", "Cancel"])
+    def test_original_warning_choices(self, window, monkeypatch, choice):
+        self._choose(monkeypatch, choice)
+        with patch.object(window._pool, "start") as start:
+            window._on_overwrite_clicked()
+        if choice == "Cancel":
+            start.assert_not_called()
+        else:
+            start.assert_called_once()
+            assert start.call_args.args[0]._destination == (
+                "/fake/video-thumbnail.mp4" if choice == "Save a copy" else None
+            )
+
+    def test_warning_defaults_to_copy_and_explains_risk(self, window, monkeypatch):
+        def execute(dialog):
+            assert dialog.defaultButton().text() == "Save a copy"
+            assert "damage the original" in dialog.text()
+            assert "similar files" in dialog.text()
+            assert "restarts" in dialog.checkBox().text()
+            dialog.button(QMessageBox.StandardButton.Cancel).click()
+            return 0
+
+        monkeypatch.setattr(QMessageBox, "exec", execute)
+        window._on_overwrite_clicked()
+
+    def test_warning_suppression_is_session_only(self, window, monkeypatch, qtbot, deps):
+        self._choose(monkeypatch, "Overwrite", suppress=True)
+        with patch.object(window._pool, "start"):
+            window._on_overwrite_clicked()
+        assert window._skip_overwrite_warning
+        window._on_apply_done(ApplyResult(success=True))
+        with (
+            patch.object(QMessageBox, "exec") as warning,
+            patch.object(window._pool, "start") as start,
+        ):
+            window._on_overwrite_clicked()
+        warning.assert_not_called()
+        assert start.call_args.args[0]._destination is None
+        other = MainWindow(*deps)
+        qtbot.addWidget(other)
+        assert not other._skip_overwrite_warning
+
+    def test_cancelling_does_not_suppress_warning(self, window, monkeypatch):
+        self._choose(monkeypatch, "Cancel", suppress=True)
+        window._on_overwrite_clicked()
+        assert not window._skip_overwrite_warning
+
+    @pytest.mark.parametrize("choice", ["Add another suffix", "Overwrite", "Cancel"])
+    def test_collision_choices(self, window, monkeypatch, choice):
+        self._choose(monkeypatch, choice)
+        with patch.object(window._pool, "start"):
+            window._on_apply_clicked()
+        with patch.object(window._pool, "start") as start:
+            window._on_apply_done(ApplyResult(
+                success=False, error_code=ApplyError.DESTINATION_EXISTS
+            ))
+        if choice == "Cancel":
+            start.assert_not_called()
+        else:
+            worker = start.call_args.args[0]
+            assert worker._destination == (
+                "/fake/video-thumbnail-thumbnail.mp4"
+                if choice == "Add another suffix" else "/fake/video-thumbnail.mp4"
+            )
+            assert worker._overwrite == (choice == "Overwrite")
+
+    def test_successful_copy_preserves_source_timeline_and_metadata(self, window):
+        source = window._video
+        position = window._timeline.current_position_ms()
+        window._on_apply_done(ApplyResult(
+            success=True, output_path="/fake/video-thumbnail.mp4", duration_shift_ms=40
+        ))
+        assert window._video is source
+        assert source.existing_thumbnail is None
+        assert source.duration_ms == 5000
+        assert window._timeline.current_position_ms() == position
+        assert window._current_frame_position_ms == 1000
+        assert "video-thumbnail.mp4" in window._apply_btn.toolTip()
+
+    def test_new_video_resets_copy_destination(self, window):
+        window._copy_destination = Path("/fake/video-thumbnail-thumbnail.mp4")
+        window._on_video_loaded(_make_vf("/fake/other.mov"))
+        assert window._copy_destination is None
 
 
 # ---------------------------------------------------------------------------
