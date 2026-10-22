@@ -27,6 +27,7 @@ def main() -> None:
 
     from video_thumbnailer.core.frame_extractor import PyAVFrameExtractor
     from video_thumbnailer.core.thumbnail_writer import FormatDispatchThumbnailWriter
+    from video_thumbnailer.core.video_converter import FFmpegVideoConverter
     from video_thumbnailer.core.video_loader import PyAVVideoLoader
     from video_thumbnailer.platform import get_cache_invalidator
     from video_thumbnailer.ui.main_window import MainWindow
@@ -41,7 +42,9 @@ def main() -> None:
     writer = FormatDispatchThumbnailWriter()
     invalidator = get_cache_invalidator()
 
-    window = MainWindow(loader, extractor, writer, invalidator)
+    window = MainWindow(
+        loader, extractor, writer, invalidator, converter=FFmpegVideoConverter()
+    )
     window.setWindowIcon(icon)
     window.show()
 

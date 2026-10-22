@@ -21,6 +21,7 @@ from PySide6.QtCore import (
     Signal,
 )
 from PySide6.QtGui import (
+    QCloseEvent,
     QColor,
     QDesktopServices,
     QDropEvent,
@@ -40,17 +41,24 @@ from PySide6.QtWidgets import (
     QLabel,
     QMainWindow,
     QMessageBox,
+    QProgressDialog,
     QStyle,
     QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
+from video_thumbnailer.core.video_converter import FFmpegVideoConverter
 from video_thumbnailer.models import ApplyResult, TimelinePosition, VideoFile
 from video_thumbnailer.ui.filmstrip_widget import FilmstripWidget
 from video_thumbnailer.ui.preview_widget import PreviewWidget
 from video_thumbnailer.ui.timeline_widget import TimelineWidget
-from video_thumbnailer.ui.worker import ApplyWorker, FrameExtractWorker, VideoLoadWorker
+from video_thumbnailer.ui.worker import (
+    ApplyWorker,
+    FrameExtractWorker,
+    VideoConvertWorker,
+    VideoLoadWorker,
+)
 
 if TYPE_CHECKING:
     from video_thumbnailer.core.frame_extractor import PyAVFrameExtractor
@@ -62,7 +70,8 @@ __all__ = ["MainWindow"]
 
 _DROP_ZONE_MIN_HEIGHT = 200
 _VIDEO_FILE_FILTER = (
-    "Video files (*.mp4 *.mov *.m4v *.mkv *.webm *.avi *.flv);;All files (*)"
+    "Video files (*.mp4 *.mov *.m4v *.mkv *.webm *.avi *.flv "
+    "*.m2ts *.mts *.ts *.mpeg *.mpg *.wmv *.vob *.mxf *.3gp *.ogv);;All files (*)"
 )
 
 
@@ -125,12 +134,16 @@ class MainWindow(QMainWindow):
         writer: FormatDispatchThumbnailWriter,
         invalidator: CacheInvalidator,
         parent: QWidget | None = None,
+        *,
+        converter: FFmpegVideoConverter | None = None,
     ) -> None:
         super().__init__(parent)
         self._loader = loader
         self._extractor = extractor
         self._writer = writer
         self._invalidator = invalidator
+        self._converter = converter if converter is not None else FFmpegVideoConverter()
+        self._conversion_dialog: QProgressDialog | None = None
 
         self._video: VideoFile | None = None
         self._current_frame: Image.Image | None = None
@@ -293,6 +306,8 @@ class MainWindow(QMainWindow):
             self._load_video(path)
 
     def _load_video(self, path: str) -> None:
+        if self._conversion_dialog is not None:
+            return
         directory = str(Path(path).parent)
         self._last_open_directory = directory
         self._settings.setValue("lastOpenDirectory", directory)
@@ -302,7 +317,71 @@ class MainWindow(QMainWindow):
         worker = VideoLoadWorker(self._loader, path)
         worker.signals.finished.connect(self._on_video_loaded)
         worker.signals.error.connect(self._on_load_error)
+        worker.signals.unsupported.connect(self._offer_conversion)
         self._pool.start(worker)
+
+    def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
+        if self._conversion_dialog is not None:
+            event.ignore()
+            return
+        super().closeEvent(event)
+
+    def _offer_conversion(self, path: str) -> None:
+        self._set_busy(False)
+        self._drop_label.setText("Drop a video file here")
+        answer = QMessageBox.question(
+            self,
+            "Convert to MP4?",
+            "This video format is not supported for thumbnail editing.\n\n"
+            "Convert it to a separate MP4 and open it to choose a thumbnail?\n"
+            "The original file will not be changed. FFmpeg first tries lossless "
+            "remuxing, then H.264/AAC encoding if needed (which can take time "
+            "and reduce quality).\n\n"
+            "Only the first playable video and all audio tracks are kept; "
+            "subtitles and data tracks are not transferred.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        source = Path(path)
+        suggested = source.with_suffix(".mp4")
+        if suggested == source or suggested.exists():
+            suggested = source.with_name(f"{source.stem}-converted.mp4")
+        destination, _ = QFileDialog.getSaveFileName(
+            self, "Save converted MP4", str(suggested), "MP4 video (*.mp4)"
+        )
+        if not destination:
+            return
+        self._conversion_dialog = QProgressDialog(
+            "Preparing MP4 conversion", "", 0, 0, self
+        )
+        self._conversion_dialog.setWindowTitle("Converting to MP4")
+        self._conversion_dialog.setCancelButton(None)
+        self._conversion_dialog.setWindowModality(Qt.WindowModality.ApplicationModal)
+        self._conversion_dialog.setMinimumDuration(0)
+        self._conversion_dialog.show()
+        self._set_busy(True)
+        worker = VideoConvertWorker(self._converter, path, destination)
+        worker.signals.progress.connect(self._conversion_dialog.setLabelText)
+        worker.signals.finished.connect(self._on_conversion_done)
+        worker.signals.error.connect(self._on_conversion_error)
+        self._pool.start(worker)
+
+    def _finish_conversion(self) -> None:
+        if self._conversion_dialog is not None:
+            self._conversion_dialog.close()
+            self._conversion_dialog.deleteLater()
+            self._conversion_dialog = None
+        self._set_busy(False)
+
+    def _on_conversion_done(self, path: str) -> None:
+        self._finish_conversion()
+        self._load_video(path)
+
+    def _on_conversion_error(self, message: str) -> None:
+        self._finish_conversion()
+        QMessageBox.critical(self, "Conversion Error", message)
 
     def _on_video_loaded(self, video: VideoFile) -> None:
         self._video = video

@@ -7,11 +7,16 @@ __all__ = [
     "UnsupportedFormatError",
     "NoVideoStreamError",
     "ExtractionError",
+    "ConversionError",
 ]
 
 
 class VideoThumbnailerError(RuntimeError):
     """Base exception for all video-thumbnailer errors."""
+
+
+class ConversionError(VideoThumbnailerError):
+    """Raised when FFmpeg cannot convert a video to MP4."""
 
 
 class UnsupportedFormatError(VideoThumbnailerError):

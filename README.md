@@ -81,6 +81,29 @@ Typical workflow:
 2. Scrub the timeline to the frame you want.
 3. Apply/save the thumbnail.
 
+### Convert other formats to MP4
+
+Opening an unsupported video container (for example M2TS, MTS, or MPEG-TS)
+offers to convert it to a separate MP4. Choose **Yes**, then choose where to save
+the MP4. Existing destinations require confirmation in the save dialog; the
+source file can never be used as the destination.
+
+Conversion runs in the background with a stage indicator. FFmpeg first attempts
+to remux the first playable video and all audio tracks without re-encoding.
+If the streams cannot be stored in MP4, the application checks FFmpeg's available
+encoders and tries H.264/AAC encoding. Re-encoding can take time and reduce
+quality. Subtitles, additional video streams, attachments, and data tracks are
+not transferred. Not every input codec or damaged file can be converted.
+
+The source is left untouched, and failed conversion does not replace an existing
+destination. On success, the MP4 opens automatically: select a frame and save its
+thumbnail as usual. Already supported containers keep their existing workflow.
+
+FFmpeg is supplied by `imageio-ffmpeg`. To use another build with the required
+decoders and H.264/AAC encoders, set `IMAGEIO_FFMPEG_EXE` to its executable path
+before launching the application. Hardware encoders are tried only if advertised
+by that build; if a device cannot initialize, another available encoder is tried.
+
 ---
 
 ## Running tests

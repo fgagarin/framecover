@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from PIL import Image
 from PySide6.QtCore import QPoint, QSettings, Qt
-from PySide6.QtGui import QKeySequence
+from PySide6.QtGui import QCloseEvent, QKeySequence
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
@@ -86,6 +86,78 @@ class TestMainWindowConstruction:
         assert window.height() >= 700
 
 class TestMainWindowVideoLoading:
+    def test_unsupported_load_offers_conversion(self, window, deps):
+        from video_thumbnailer.exceptions import UnsupportedFormatError
+
+        deps[0].load.side_effect = UnsupportedFormatError("clip.m2ts")
+        with (
+            patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.No) as question,
+            patch.object(window._pool, "start", side_effect=lambda worker: worker.run()),
+        ):
+            window._load_video("clip.m2ts")
+        question.assert_called_once()
+        assert window._conversion_dialog is None
+        assert window._drop_label.text() == "Drop a video file here"
+
+    def test_conversion_save_cancel_does_not_start_worker(self, window):
+        with (
+            patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes),
+            patch.object(QFileDialog, "getSaveFileName", return_value=("", "")),
+            patch.object(window._pool, "start") as start,
+        ):
+            window._offer_conversion("clip.m2ts")
+        start.assert_not_called()
+        assert window._conversion_dialog is None
+
+    def test_successful_conversion_opens_mp4(self, window, tmp_path):
+        source = str(tmp_path / "clip.m2ts")
+        destination = str(tmp_path / "clip.mp4")
+        window._converter = MagicMock()
+        window._converter.convert.return_value = destination
+        with (
+            patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes),
+            patch.object(QFileDialog, "getSaveFileName", return_value=(destination, "")) as save,
+            patch.object(window._pool, "start", side_effect=lambda worker: worker.run()),
+            patch.object(window, "_load_video") as load,
+        ):
+            window._offer_conversion(source)
+        assert save.call_args.args[2] == destination
+        load.assert_called_once_with(destination)
+        assert window._conversion_dialog is None
+        window._converter.convert.assert_called_once()
+
+    def test_conversion_error_restores_ui_and_keeps_current_video(self, window, tmp_path):
+        video = _make_vf()
+        window._on_video_loaded(video)
+        window._converter = MagicMock()
+        window._converter.convert.side_effect = RuntimeError("encoding failed")
+        with (
+            patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes),
+            patch.object(QFileDialog, "getSaveFileName", return_value=(str(tmp_path / "clip.mp4"), "")),
+            patch.object(QMessageBox, "critical") as critical,
+            patch.object(window._pool, "start", side_effect=lambda worker: worker.run()),
+        ):
+            window._offer_conversion(str(tmp_path / "clip.m2ts"))
+        critical.assert_called_once_with(window, "Conversion Error", "encoding failed")
+        assert window._conversion_dialog is None
+        assert window._video is video
+        assert window._timeline.isEnabled()
+
+    def test_conversion_blocks_opening_another_video(self, window, tmp_path):
+        with (
+            patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes),
+            patch.object(QFileDialog, "getSaveFileName", return_value=(str(tmp_path / "clip.mp4"), "")),
+            patch.object(window._pool, "start") as start,
+        ):
+            window._offer_conversion(str(tmp_path / "clip.m2ts"))
+            assert window._conversion_dialog is not None
+            window._load_video("other.mp4")
+            start.assert_called_once()
+            close = QCloseEvent()
+            window.closeEvent(close)
+            assert not close.isAccepted()
+        window._finish_conversion()
+
     def test_reencode_warning_tracks_loaded_video(
         self, window: MainWindow, deps
     ) -> None:

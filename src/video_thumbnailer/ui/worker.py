@@ -8,15 +8,19 @@ from typing import TYPE_CHECKING
 from PIL import Image
 from PySide6.QtCore import QObject, QRunnable, Signal, Slot
 
+from video_thumbnailer.exceptions import UnsupportedFormatError
 from video_thumbnailer.models import TimelinePosition, VideoFile
 
 if TYPE_CHECKING:
     from video_thumbnailer.core.frame_extractor import PyAVFrameExtractor
     from video_thumbnailer.core.thumbnail_writer import FormatDispatchThumbnailWriter
+    from video_thumbnailer.core.video_converter import FFmpegVideoConverter
     from video_thumbnailer.core.video_loader import PyAVVideoLoader
     from video_thumbnailer.platform import CacheInvalidator
 
-__all__ = ["VideoLoadWorker", "FrameExtractWorker", "ApplyWorker"]
+__all__ = [
+    "VideoLoadWorker", "VideoConvertWorker", "FrameExtractWorker", "ApplyWorker",
+]
 
 
 # ---------------------------------------------------------------------------
@@ -26,6 +30,7 @@ __all__ = ["VideoLoadWorker", "FrameExtractWorker", "ApplyWorker"]
 class _VideoLoadSignals(QObject):
     finished: Signal = Signal(object)  # VideoFile
     error: Signal = Signal(str)
+    unsupported: Signal = Signal(str)
 
 
 class VideoLoadWorker(QRunnable):
@@ -47,6 +52,41 @@ class VideoLoadWorker(QRunnable):
         try:
             video = self._loader.load(self._path)
             self.signals.finished.emit(video)
+        except UnsupportedFormatError:
+            self.signals.unsupported.emit(self._path)
+        except Exception as exc:  # noqa: BLE001
+            self.signals.error.emit(str(exc))
+
+
+class _VideoConvertSignals(QObject):
+    finished: Signal = Signal(str)
+    error: Signal = Signal(str)
+    progress: Signal = Signal(str)
+
+
+class VideoConvertWorker(QRunnable):
+    """Convert a video off the GUI thread and emit its output path or error."""
+
+    def __init__(
+        self,
+        converter: FFmpegVideoConverter,
+        source: str,
+        destination: str,
+    ) -> None:
+        super().__init__()
+        self._converter = converter
+        self._source = source
+        self._destination = destination
+        self.signals = _VideoConvertSignals()
+
+    @Slot()
+    def run(self) -> None:
+        try:
+            path = self._converter.convert(
+                self._source, self._destination, overwrite=True,
+                on_progress=self.signals.progress.emit,
+            )
+            self.signals.finished.emit(path)
         except Exception as exc:  # noqa: BLE001
             self.signals.error.emit(str(exc))
 

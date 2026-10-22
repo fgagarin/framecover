@@ -15,7 +15,12 @@ from video_thumbnailer.models import (
     VideoFile,
     VideoFormat,
 )
-from video_thumbnailer.ui.worker import ApplyWorker, FrameExtractWorker, VideoLoadWorker
+from video_thumbnailer.ui.worker import (
+    ApplyWorker,
+    FrameExtractWorker,
+    VideoConvertWorker,
+    VideoLoadWorker,
+)
 
 
 def _make_vf() -> VideoFile:
@@ -49,6 +54,18 @@ def _run_worker(worker):
 # ---------------------------------------------------------------------------
 
 class TestVideoLoadWorker:
+    def test_unsupported_format_emits_conversion_path(self):
+        from video_thumbnailer.exceptions import UnsupportedFormatError
+
+        loader = MagicMock(spec=PyAVVideoLoader)
+        loader.load.side_effect = UnsupportedFormatError("clip.m2ts")
+        worker = VideoLoadWorker(loader, "clip.m2ts")
+        paths = []
+        worker.signals.unsupported.connect(paths.append)
+        finished, errors = _run_worker(worker)
+        assert paths == ["clip.m2ts"]
+        assert finished == errors == []
+
     def test_run_success_emits_finished(self) -> None:
         loader = MagicMock(spec=PyAVVideoLoader)
         vf = _make_vf()
@@ -76,6 +93,27 @@ class TestVideoLoadWorker:
 # ---------------------------------------------------------------------------
 # FrameExtractWorker
 # ---------------------------------------------------------------------------
+
+class TestVideoConvertWorker:
+    def test_conversion_emits_output_and_progress(self):
+        converter = MagicMock()
+        converter.convert.return_value = "out.mp4"
+        worker = VideoConvertWorker(converter, "in.m2ts", "out.mp4")
+        finished, errors = _run_worker(worker)
+        assert finished == ["out.mp4"]
+        assert errors == []
+        converter.convert.assert_called_once_with(
+            "in.m2ts", "out.mp4", overwrite=True,
+            on_progress=worker.signals.progress.emit,
+        )
+
+    def test_conversion_error_is_reported(self):
+        converter = MagicMock()
+        converter.convert.side_effect = RuntimeError("encoder failed")
+        finished, errors = _run_worker(VideoConvertWorker(converter, "in.m2ts", "out.mp4"))
+        assert finished == []
+        assert errors == ["encoder failed"]
+
 
 class TestFrameExtractWorker:
     def test_run_success_emits_finished(self) -> None:
