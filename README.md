@@ -85,7 +85,35 @@ Typical workflow:
 
 1. Open a video file.
 2. Scrub the timeline to the frame you want.
-3. Apply/save the thumbnail.
+3. Click **Save thumbnail** (or press **Ctrl+S**) to save a copy named
+   `video-thumbnail.mp4`, leaving the original unchanged.
+
+### Saving copies and overwriting originals
+
+The arrow on the right of the Save button opens two actions: **Save a copy**
+(the default) and **Overwrite original…**. Overwriting the original displays a
+warning that the program may damage it, with **Save a copy**, **Overwrite**, and
+**Cancel** choices. The checkbox suppresses this warning only until the program
+restarts. If you have not tested the program on similar files, save a copy.
+
+When a copy's name already exists, choose **Overwrite**, **Add another suffix**
+(for example, `video-thumbnail-thumbnail.mp4`), or **Cancel**. Previously saved
+copies of the same unchanged source can be updated without confirmation.
+The application verifies both files against a hidden receipt next to the copy;
+if the receipt is missing or either file has changed, it asks before overwriting.
+Keep the receipt with the copy to retain this verification across restarts.
+
+Copying, verification, and thumbnail processing run in the background. A failed
+copy save does not replace an existing destination. After saving a copy, the
+original stays open for frame selection, so saving again does not accumulate
+inserted preview frames. Container limitations still apply: formats without
+embedded cover art rely on the platform's thumbnail-cache support.
+
+On filesystems without hard-link support (such as FAT/exFAT), a new copy becomes
+visible while its bytes are being written. An interrupted write may leave an
+incomplete copy, but does not overwrite an existing file. If another application
+changes the destination during a save, recovery backups are retained whenever
+they cannot be restored safely; any recovery paths are included in the error.
 
 ### Convert other formats to MP4
 

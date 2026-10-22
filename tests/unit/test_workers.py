@@ -175,7 +175,11 @@ class TestApplyWorker:
         worker = ApplyWorker(writer, invalidator, vf, thumbnail)
         finished, errors = _run_worker(worker)
 
-        invalidator.invalidate.assert_called_once_with(vf)
+        invalidator.invalidate.assert_called_once()
+        cached_video = invalidator.invalidate.call_args.args[0]
+        assert cached_video.path == vf.path
+        assert cached_video.existing_thumbnail is thumbnail
+        assert vf.existing_thumbnail is None
         assert len(finished) == 1
         assert finished[0].success is True
         assert errors == []
@@ -227,3 +231,64 @@ class TestApplyWorker:
         assert finished == []
         assert len(errors) == 1
         assert "unexpected error" in errors[0]
+
+    def test_destination_saves_copy_and_invalidates_final_thumbnail(self, tmp_path):
+        source = tmp_path / "source.mp4"
+        source.write_bytes(b"original")
+        destination = tmp_path / "output.mp4"
+        vf = _make_vf()
+        vf.path = str(source)
+        thumbnail = Image.new("RGB", (10, 10))
+        writer = MagicMock(spec=FormatDispatchThumbnailWriter)
+        writer.write.return_value = ApplyResult(success=True)
+        invalidator = MagicMock()
+        worker = ApplyWorker(
+            writer, invalidator, vf, thumbnail, position_ms=120,
+            destination=str(destination),
+        )
+
+        finished, errors = _run_worker(worker)
+
+        assert errors == []
+        assert finished[0].success
+        assert finished[0].output_path == str(destination)
+        assert destination.read_bytes() == source.read_bytes() == b"original"
+        staged = writer.write.call_args.args[0]
+        assert staged.path != vf.path
+        assert writer.write.call_args.kwargs["position_ms"] == 120
+        assert writer.write.call_args.kwargs["on_progress"] == worker.signals.progress.emit
+        cached = invalidator.invalidate.call_args.args[0]
+        assert cached.path == str(destination)
+        assert cached.existing_thumbnail is thumbnail
+        assert vf.path == str(source)
+        assert vf.existing_thumbnail is None
+
+    def test_destination_collision_skips_cache_unless_overwrite(self, tmp_path):
+        source = tmp_path / "source.mp4"
+        source.write_bytes(b"original")
+        destination = tmp_path / "output.mp4"
+        destination.write_bytes(b"other")
+        vf = _make_vf()
+        vf.path = str(source)
+        writer = MagicMock(spec=FormatDispatchThumbnailWriter)
+        writer.write.return_value = ApplyResult(success=True)
+        invalidator = MagicMock()
+        thumbnail = Image.new("RGB", (10, 10))
+        finished, errors = _run_worker(
+            ApplyWorker(writer, invalidator, vf, thumbnail, destination=str(destination))
+        )
+        from video_thumbnailer.models import ApplyError
+
+        assert errors == []
+        assert finished[0].error_code is ApplyError.DESTINATION_EXISTS
+        writer.write.assert_not_called()
+        invalidator.invalidate.assert_not_called()
+        finished, errors = _run_worker(
+            ApplyWorker(
+                writer, invalidator, vf, thumbnail,
+                destination=str(destination), overwrite=True,
+            )
+        )
+        assert errors == []
+        assert finished[0].success
+        assert destination.read_bytes() == b"original"

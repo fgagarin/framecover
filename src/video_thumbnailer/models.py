@@ -124,6 +124,7 @@ class ApplyError(Enum):
     NO_VIDEO_STREAM = "no_video_stream"
     FFMPEG_ERROR = "ffmpeg_error"
     DISK_FULL = "disk_full"
+    DESTINATION_EXISTS = "destination_exists"
     UNEXPECTED = "unexpected"
 
 
@@ -139,6 +140,7 @@ class ApplyResult:
         duration_shift_ms: Milliseconds by which every original frame's timeline
             position moved forward (the concat fast path prepends a new frame,
             growing the file's duration by this much); 0 when not applicable.
+        output_path: Final saved copy path, or None for in-place operations/failures.
     """
 
     success: bool
@@ -146,6 +148,7 @@ class ApplyResult:
     error_message: str | None = None
     elapsed_ms: int = 0
     duration_shift_ms: int = 0
+    output_path: str | None = None
 
 
 @dataclass

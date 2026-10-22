@@ -13,7 +13,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QMessageBox,
     QPlainTextEdit,
-    QPushButton,
     QSizePolicy,
     QStyle,
     QToolButton,
@@ -89,10 +88,16 @@ class PreviewWidget(QWidget):
         self._progress_timer.setInterval(200)
         self._progress_timer.timeout.connect(self._refresh_save_progress)
         thumbnail_layout.addWidget(self._current_panel, 1)
-        self.apply_button = QPushButton("Save thumbnail")
+        self.apply_button = QToolButton()
+        self.apply_button.setText("Save thumbnail")
+        self.apply_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.apply_button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
         self.apply_button.setIcon(self._white_save_icon())
         self.apply_button.setIconSize(QSize(20, 20))
-        self.apply_button.setToolTip("Save the selected frame as the video thumbnail")
+        self.apply_button.setToolTip(
+            "Save a copy with the selected frame as its thumbnail; "
+            "use the arrow to overwrite original"
+        )
         self.apply_button.setAccessibleName("Save thumbnail")
         self.apply_button.setMinimumHeight(34)
         self.apply_button.setFixedWidth(176)
@@ -100,12 +105,12 @@ class PreviewWidget(QWidget):
             QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed
         )
         self.apply_button.setStyleSheet(
-            "QPushButton { background: #0078d4; color: white; "
+            "QToolButton { background: #0078d4; color: white; "
             "border: 1px solid #005a9e; "
             "border-radius: 6px; }"
-            "QPushButton:hover { background: #006cbe; }"
-            "QPushButton:pressed { background: #005a9e; }"
-            "QPushButton:disabled { background: #8ab9dc; border-color: #8ab9dc; }"
+            "QToolButton:hover { background: #006cbe; }"
+            "QToolButton:pressed { background: #005a9e; }"
+            "QToolButton:disabled { background: #8ab9dc; border-color: #8ab9dc; }"
         )
         self._save_duration_label = QLabel()
         self._save_duration_label.setStyleSheet("color: #666666; font-size: 12px;")
