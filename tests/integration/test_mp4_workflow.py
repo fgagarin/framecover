@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import shutil
 import time
+from hashlib import sha256
 from pathlib import Path
 
 import av
 import pytest
 
 from video_thumbnailer.core.frame_extractor import PyAVFrameExtractor
+from video_thumbnailer.core.save_copy import save_copy
 from video_thumbnailer.core.thumbnail_writer import FormatDispatchThumbnailWriter
 from video_thumbnailer.core.video_loader import PyAVVideoLoader
+from video_thumbnailer.models import TimelinePosition
 
 
 @pytest.fixture()
@@ -61,6 +64,44 @@ def _generate_mov(tmp_path: Path) -> Path:
 
 
 class TestMp4Workflow:
+    def test_copy_save_preserves_original_and_reuses_without_duration_growth(
+        self,
+        loader: PyAVVideoLoader,
+        extractor: PyAVFrameExtractor,
+        writer: FormatDispatchThumbnailWriter,
+        sample_video: Path,
+        tmp_path: Path,
+    ) -> None:
+        original_digest = sha256(sample_video.read_bytes()).hexdigest()
+        video = loader.load(str(sample_video))
+        destination = tmp_path / "thumbnail-copy.mp4"
+        frame = extractor.extract(video, TimelinePosition(offset_ms=1000))
+
+        first = save_copy(
+            writer, video, frame, str(destination), position_ms=1000,
+        )
+
+        assert first.success, first.error_message
+        assert first.output_path == str(destination)
+        reopened = loader.load(str(destination))
+        assert reopened.existing_thumbnail is not None
+        assert reopened.thumbnail_position_ms == 1000 + first.duration_shift_ms
+        assert _has_attached_pic_stream(destination)
+
+        second_frame = extractor.extract(video, TimelinePosition(offset_ms=2000))
+        second = save_copy(
+            FormatDispatchThumbnailWriter(), loader.load(str(sample_video)),
+            second_frame, str(destination), position_ms=2000,
+        )
+
+        assert second.success, second.error_message
+        assert second.output_path == str(destination)
+        repeated = loader.load(str(destination))
+        assert repeated.existing_thumbnail is not None
+        assert repeated.thumbnail_position_ms == 2000 + second.duration_shift_ms
+        assert repeated.duration_ms == reopened.duration_ms
+        assert sha256(sample_video.read_bytes()).hexdigest() == original_digest
+
     def test_mp4_full_pipeline_success(
         self,
         loader: PyAVVideoLoader,

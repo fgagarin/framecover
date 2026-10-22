@@ -52,7 +52,12 @@ from PySide6.QtWidgets import (
 
 from video_thumbnailer import __version__
 from video_thumbnailer.core.video_converter import FFmpegVideoConverter
-from video_thumbnailer.models import ApplyError, ApplyResult, TimelinePosition, VideoFile
+from video_thumbnailer.models import (
+    ApplyError,
+    ApplyResult,
+    TimelinePosition,
+    VideoFile,
+)
 from video_thumbnailer.ui.filmstrip_widget import FilmstripWidget
 from video_thumbnailer.ui.preview_widget import PreviewWidget
 from video_thumbnailer.ui.timeline_widget import TimelineWidget
@@ -624,7 +629,7 @@ class MainWindow(QMainWindow):
         self._finish_save_state()
 
         if result.error_code == ApplyError.DESTINATION_EXISTS:
-            self._resolve_copy_conflict()
+            self._resolve_copy_conflict(result.error_message)
             return
 
         if result.success:
@@ -683,7 +688,7 @@ class MainWindow(QMainWindow):
                 result.error_message or "An unknown error occurred.",
             )
 
-    def _resolve_copy_conflict(self) -> None:
+    def _resolve_copy_conflict(self, message: str | None = None) -> None:
         if self._copy_destination is None:
             return
         dialog = QMessageBox(self)
@@ -695,6 +700,8 @@ class MainWindow(QMainWindow):
             "as a saved copy of this video.\n\n"
             "Overwrite it or add another suffix to save a separate copy?"
         )
+        if message:
+            dialog.setInformativeText(message)
         another = dialog.addButton(
             "Add another suffix", QMessageBox.ButtonRole.AcceptRole
         )

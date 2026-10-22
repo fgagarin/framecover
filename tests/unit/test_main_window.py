@@ -814,6 +814,21 @@ class TestCopySaveChoices:
         assert window._current_frame_position_ms == 1000
         assert "video-thumbnail.mp4" in window._apply_btn.toolTip()
 
+    def test_collision_displays_recovery_details(self, window, monkeypatch):
+        def execute(dialog):
+            assert "recovery.mp4" in dialog.informativeText()
+            dialog.button(QMessageBox.StandardButton.Cancel).click()
+            return 0
+
+        monkeypatch.setattr(QMessageBox, "exec", execute)
+        with patch.object(window._pool, "start"):
+            window._on_apply_clicked()
+        window._on_apply_done(ApplyResult(
+            success=False,
+            error_code=ApplyError.DESTINATION_EXISTS,
+            error_message="Concurrent output preserved at /fake/recovery.mp4",
+        ))
+
     def test_new_video_resets_copy_destination(self, window):
         window._copy_destination = Path("/fake/video-thumbnail-thumbnail.mp4")
         window._on_video_loaded(_make_vf("/fake/other.mov"))

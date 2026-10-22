@@ -95,7 +95,8 @@ class PreviewWidget(QWidget):
         self.apply_button.setIcon(self._white_save_icon())
         self.apply_button.setIconSize(QSize(20, 20))
         self.apply_button.setToolTip(
-            "Save a copy with the selected thumbnail; use the arrow to overwrite original"
+            "Save a copy with the selected frame as its thumbnail; "
+            "use the arrow to overwrite original"
         )
         self.apply_button.setAccessibleName("Save thumbnail")
         self.apply_button.setMinimumHeight(34)
