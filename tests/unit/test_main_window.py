@@ -99,14 +99,21 @@ class TestMainWindowConstruction:
     def test_drop_zone_visible(self, window: MainWindow) -> None:
         assert window._drop_label.isVisible()
 
-    def test_default_window_is_wide(self, qtbot, deps) -> None:
-        # Window managers can clamp the size to the screen after show().
+    def test_default_window_is_compact(self, qtbot, deps) -> None:
         window = MainWindow(*deps)
         qtbot.addWidget(window)
-        assert window.width() >= 1200
-        assert window.height() >= 700
+        assert window.width() == 900
+        assert window.height() == 560
 
 class TestMainWindowVideoLoading:
+    def test_window_expands_after_video_load(self, window: MainWindow) -> None:
+        initial_size = window.size()
+
+        window._on_video_loaded(_make_vf())
+
+        assert window.width() > initial_size.width()
+        assert window.height() > initial_size.height()
+
     def test_unsupported_load_offers_conversion(self, window, deps):
         from video_thumbnailer.exceptions import UnsupportedFormatError
 

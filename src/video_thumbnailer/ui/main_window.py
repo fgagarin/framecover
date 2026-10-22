@@ -170,7 +170,7 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle("Video Thumbnailer")
         self.setMinimumSize(900, 560)
-        self.resize(1280, 720)
+        self.resize(900, 560)
         self.setAcceptDrops(True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
@@ -387,6 +387,7 @@ class MainWindow(QMainWindow):
         QMessageBox.critical(self, "Conversion Error", message)
 
     def _on_video_loaded(self, video: VideoFile) -> None:
+        self.resize(1280, 720)
         self._video = video
         self._current_frame = None
         self._current_frame_position_ms = None
