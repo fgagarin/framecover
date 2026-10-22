@@ -41,6 +41,12 @@ video-thumbnailer
 - Python 3.13+
 - [uv](https://github.com/astral-sh/uv) or `pip` (for environment setup)
 
+Dependency baseline: PySide6 6.12.0, PyAV 19.0.2, Pillow 13.0.0,
+imageio-ffmpeg 0.6.0, and mutagen 1.48.1. Exact runtime and development versions
+are recorded in `uv.lock`; use `uv sync --frozen --extra dev` to reproduce them.
+The upgraded stack was validated on Windows with Python 3.14, including native
+PyInstaller 6.22.3 packaging and application-window initialization.
+
 ---
 
 ## Setup
