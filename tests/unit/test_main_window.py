@@ -98,6 +98,22 @@ class TestMainWindowConstruction:
 
     def test_drop_zone_visible(self, window: MainWindow) -> None:
         assert window._drop_label.isVisible()
+        assert "1 — Открой видео" in window._drop_label.text()
+        assert "2 — Выбери кадр" in window._drop_label.text()
+        assert "3 — Сохрани превью" in window._drop_label.text()
+
+    def test_start_screen_shows_test_build_metadata_and_links(
+        self, window: MainWindow
+    ) -> None:
+        info = window._start_info_label
+        assert "Тестовая сборка" in info.text()
+        assert "0.1.0" in info.text()
+        assert "Fedor Gagarin" in info.text()
+        assert "LICENSE" in info.text()
+        assert "fgagarin.github.io/video-thumbnailer" in info.text()
+        assert "CHANGELOG.md#unreleased" in info.text()
+        assert info.openExternalLinks()
+        assert info.isVisible()
 
     def test_default_window_is_compact(self, qtbot, deps) -> None:
         window = MainWindow(*deps)
@@ -203,6 +219,7 @@ class TestMainWindowVideoLoading:
         assert window._video is vf
         assert window._timeline.isEnabled()
         assert window._preview.isVisible()
+        assert not window._start_info_label.isVisible()
         assert window._filmstrip.isVisible()
         assert window._timeline.isVisible()
         assert window._apply_btn.isVisible()
