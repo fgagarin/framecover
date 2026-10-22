@@ -13,6 +13,7 @@ from PySide6.QtGui import QCloseEvent, QKeySequence
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
+from video_thumbnailer import __version__
 from video_thumbnailer.core.frame_extractor import PyAVFrameExtractor
 from video_thumbnailer.core.thumbnail_writer import FormatDispatchThumbnailWriter
 from video_thumbnailer.core.video_loader import PyAVVideoLoader
@@ -107,7 +108,7 @@ class TestMainWindowConstruction:
     ) -> None:
         info = window._start_info_label
         assert "Тестовая сборка" in info.text()
-        assert "0.1.0" in info.text()
+        assert __version__ in info.text()
         assert "Fedor Gagarin" in info.text()
         assert "LICENSE" in info.text()
         assert "fgagarin.github.io/video-thumbnailer" in info.text()
@@ -141,7 +142,7 @@ class TestMainWindowVideoLoading:
             window._load_video("clip.m2ts")
         question.assert_called_once()
         assert window._conversion_dialog is None
-        assert window._drop_label.text() == "Drop a video file here"
+        assert "1 — Открой видео" in window._drop_label.text()
 
     def test_conversion_save_cancel_does_not_start_worker(self, window):
         with (

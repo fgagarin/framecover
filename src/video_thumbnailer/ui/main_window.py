@@ -71,9 +71,9 @@ __all__ = ["MainWindow"]
 
 _DROP_ZONE_MIN_HEIGHT = 200
 _START_SCREEN_TEXT = (
-    "Drop a video file here or click to open<br><br>"
-    "1 — Открой видео<br>"
-    "2 — Выбери кадр<br>"
+    "Drop a video file here or click to open\n\n"
+    "1 — Открой видео\n"
+    "2 — Выбери кадр\n"
     "3 — Сохрани превью"
 )
 _START_INFO_TEXT = (
