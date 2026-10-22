@@ -447,3 +447,42 @@ def test_unrelated_capture_retained_when_racer_blocks_restoration(
     assert len(backups) == 1
     assert backups[0].read_bytes() == b"first unrelated replacement"
     assert str(backups[0]) in result.error_message
+
+
+@pytest.mark.parametrize("blocked_restore", [False, True])
+def test_captured_source_symlink_is_restored_or_retained_safely(
+    setup_copy, monkeypatch, blocked_restore,
+):
+    source, destination, _, _, _ = setup_copy
+    assert _save(setup_copy).success
+    racing_link = destination.with_name("racing-source-alias")
+    try:
+        racing_link.symlink_to(source)
+    except (OSError, NotImplementedError) as exc:
+        pytest.skip(f"Platform does not permit symlink creation: {exc}")
+    original_replace = service.os.replace
+
+    def racing_replace(original, target):
+        if ".backup-" in str(Path(target).parent):
+            original_replace(racing_link, destination)
+            original_replace(original, target)
+            if blocked_restore:
+                destination.write_bytes(b"racing output")
+        else:
+            original_replace(original, target)
+
+    monkeypatch.setattr(service.os, "replace", racing_replace)
+    result = _save(setup_copy)
+    assert result.error_code is ApplyError.DESTINATION_EXISTS
+    assert source.read_bytes() == b"original video contents"
+    if not blocked_restore and destination.is_symlink():
+        assert destination.readlink() == source
+        assert not list(destination.parent.glob(".*.backup-*"))
+    else:
+        backups = list(destination.parent.glob(".*.backup-*/*"))
+        assert len(backups) == 1
+        assert backups[0].is_symlink()
+        assert backups[0].readlink() == source
+        assert str(backups[0]) in result.error_message
+        if blocked_restore:
+            assert destination.read_bytes() == b"racing output"
