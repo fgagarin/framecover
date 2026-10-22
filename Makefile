@@ -1,6 +1,7 @@
-.PHONY: help sync dist-linux dist-macos dist-windows test lint typecheck coverage clean
+.PHONY: help sync dist-linux dist-macos dist-windows test lint typecheck coverage clean changelog release
 
 UV ?= uv
+VERSION ?=
 
 help:
 	@echo "video-thumbnailer build targets"
@@ -16,12 +17,21 @@ help:
 	@echo "  lint         Run ruff linter"
 	@echo "  typecheck    Run mypy strict type check"
 	@echo "  coverage     Run tests with >=80% coverage gate"
+	@echo "  changelog    Generate CHANGELOG.md from Conventional Commits"
+	@echo "  release      Commit and tag a release (VERSION=X.Y.Z, or auto)"
+	@echo "               Does not push; push the branch and tag to publish"
 	@echo "  clean        Remove build artefacts"
 
 # ── Environment ───────────────────────────────────────────────────────────────
 
 sync:
 	$(UV) sync --extra dev
+
+changelog:
+	$(UV) run git-changelog --output CHANGELOG.md
+
+release:
+	$(UV) run python scripts/release.py create --version "$(VERSION)" --uv "$(UV)"
 
 # ── Distribution ─────────────────────────────────────────────────────────────
 
@@ -49,7 +59,7 @@ test:
 	$(UV) run pytest tests/unit/ tests/integration/ -q
 
 lint:
-	$(UV) run ruff check src/ tests/
+	$(UV) run ruff check src/ tests/ scripts/
 
 typecheck:
 	$(UV) run mypy --strict src/

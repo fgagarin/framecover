@@ -165,6 +165,54 @@ pyinstaller pyinstaller.spec --distpath dist/linux --workpath build/linux --noco
 
 ---
 
+## Changelog and releases
+
+Development dependencies include `git-changelog`. Commit messages follow
+[Conventional Commits](https://www.conventionalcommits.org/):
+`feat: ...`, `fix: ...`, and `feat!: ...` or a `BREAKING CHANGE:` footer.
+
+```bash
+make changelog                 # regenerate CHANGELOG.md, including Unreleased
+make release VERSION=0.2.0     # explicit stable version (v0.2.0 also accepted)
+make release                  # let git-changelog calculate the next version
+```
+
+`make release` requires a clean working tree, a checked-out branch and full Git
+history. It generates the changelog, synchronizes the project/package/lockfile
+versions, creates a `chore(release): vX.Y.Z` commit and an annotated `vX.Y.Z` tag.
+It does **not** push or publish automatically. Review the result, then run:
+
+```bash
+git push --atomic origin HEAD refs/tags/v0.2.0
+```
+
+Without `VERSION`, version calculation is delegated to `git-changelog`:
+features bump minor, fixes bump patch, and breaking changes bump major
+(for 0.x versions, git-changelog's default zero-version rules apply).
+Before the first version tag, git-changelog determines the initial version;
+use `VERSION` to select a different initial release. Only stable `X.Y.Z` versions
+are supported, and existing versions cannot be released again.
+
+Pushing a `vX.Y.Z` tag triggers the release workflow. It validates the tag against
+the project, package and lockfile versions, generates the full changelog and notes
+for that version, then builds natively on Linux, macOS and Windows. After **all
+three builds succeed**, it publishes a GitHub Release containing:
+
+- Linux executable in a `.tar.gz` archive.
+- macOS `.app` bundle in a `.tar.gz` archive (preserving executable permissions).
+- Windows `.exe`.
+- Full `CHANGELOG.md`, with the current version's changes in the release body.
+
+The normal branch/PR CI remains separate. Version numbers in the macOS bundle
+are read from `pyproject.toml`. GitHub Actions uses `GITHUB_TOKEN` with write
+permission only in the publication job; no personal token is required.
+
+If a local release command fails, inspect `git status` before retrying: generated
+files or a completed release commit can remain, but the command never pushes.
+No release is created while merely installing these tools.
+
+---
+
 ## Project structure
 
 ```
@@ -187,6 +235,6 @@ tests/
 ## Code quality
 
 ```bash
-ruff check src/ tests/    # linting
+ruff check src/ tests/ scripts/    # linting
 mypy --strict src/         # type checking
 ```

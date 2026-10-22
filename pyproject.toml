@@ -20,6 +20,7 @@ dev = [
     "ruff>=0.4",
     "mypy>=1.10",
     "pyinstaller>=6.0",
+    "git-changelog>=2.5,<3",
 ]
 
 [project.scripts]
@@ -52,3 +53,11 @@ addopts = "--tb=short"
 [tool.coverage.run]
 branch = true
 source = ["video_thumbnailer"]
+
+[tool.git-changelog]
+convention = "conventional"
+provider = "github"
+template = "keepachangelog"
+versioning = "semver"
+parse-trailers = true
+sections = ["feat", "fix", "perf", "refactor", "revert", "build", "ci", "docs"]

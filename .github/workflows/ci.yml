@@ -5,6 +5,9 @@ on:
     branches: ["**"]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   lint:
     name: Lint
@@ -18,7 +21,7 @@ jobs:
         with:
           python-version: "3.13"
       - run: pip install -e ".[dev]"
-      - run: ruff check src/ tests/
+      - run: ruff check src/ tests/ scripts/
 
   typecheck:
     name: Type Check
@@ -100,14 +103,11 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            artifact: video-thumbnailer
-            asset_name: video-thumbnailer-linux
+            platform: linux
           - os: macos-latest
-            artifact: video-thumbnailer
-            asset_name: video-thumbnailer-macos
+            platform: macos
           - os: windows-latest
-            artifact: video-thumbnailer.exe
-            asset_name: video-thumbnailer-windows.exe
+            platform: windows
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -121,9 +121,11 @@ jobs:
           --distpath dist
           --workpath build
           --noconfirm
+      - name: Package distribution
+        run: python scripts/release.py package --platform ${{ matrix.platform }}
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.asset_name }}
-          path: dist/${{ matrix.artifact }}
+          name: video-thumbnailer-${{ matrix.platform }}
+          path: release-assets/*
           if-no-files-found: error

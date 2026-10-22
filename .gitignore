@@ -26,6 +26,7 @@ ENV/
 
 # Distribution / packaging
 .Python
+release-assets/
 
 # PyInstaller
 *.spec.bak

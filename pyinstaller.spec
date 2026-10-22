@@ -11,7 +11,12 @@ Or via Makefile targets:
 """
 
 import sys
+import tomllib
+from pathlib import Path
 from PyInstaller.utils.hooks import collect_data_files
+
+with Path("pyproject.toml").open("rb") as project_file:
+    project_version = tomllib.load(project_file)["project"]["version"]
 
 # Collect runtime data files for PyAV (ffmpeg dylibs) and PySide6 (Qt plugins)
 datas = []
@@ -109,8 +114,8 @@ if _onedir:
         info_plist={
             "CFBundleName": "Video Thumbnailer",
             "CFBundleDisplayName": "Video Thumbnailer",
-            "CFBundleShortVersionString": "0.1.0",
-            "CFBundleVersion": "0.1.0",
+            "CFBundleShortVersionString": project_version,
+            "CFBundleVersion": project_version,
             "NSHighResolutionCapable": True,
             "LSBackgroundOnly": False,
             "LSUIElement": False,
