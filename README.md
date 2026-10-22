@@ -145,6 +145,9 @@ pytest tests/benchmarks/ --benchmark-only
 The benchmarks enforce a 500 ms maximum per extraction for SD, 1080p, and 4K.
 Frame extraction uses up to four decoder threads to accelerate seeking.
 
+Linux CI tests use the distribution's FFmpeg via `IMAGEIO_FFMPEG_EXE=ffmpeg`:
+the bundled Linux FFmpeg 7.0.2 can crash while reading MPEG-TS inputs.
+
 ### Via Makefile
 
 ```bash

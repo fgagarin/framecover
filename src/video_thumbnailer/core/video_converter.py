@@ -34,7 +34,8 @@ def _run_ffmpeg(command: list[str]) -> subprocess.CompletedProcess[bytes]:
 
 
 def _failure_details(error: subprocess.CalledProcessError) -> str:
-    return (error.stderr or b"").decode(errors="replace").strip()[-4000:]
+    stderr = (error.stderr or b"").decode(errors="replace").strip()[-4000:]
+    return f"exit code {error.returncode}" + (f": {stderr}" if stderr else "")
 
 
 class FFmpegVideoConverter:

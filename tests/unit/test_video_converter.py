@@ -176,6 +176,20 @@ def test_failed_encoding_preserves_existing_destination(conversion):
     assert list(target.parent.glob(".output-*.mp4")) == []
 
 
+def test_encoder_crash_without_stderr_reports_exit_code(conversion):
+    converter, source, target, run, _ = conversion
+    run.side_effect = [
+        _ffmpeg_error(),
+        subprocess.CompletedProcess([], 0, stdout=b" V....D libx264\n A..... aac\n"),
+        subprocess.CalledProcessError(-11, ["ffmpeg"], stderr=b""),
+    ]
+    with pytest.raises(ConversionError, match="libx264: exit code -11"):
+        converter.convert(str(source), str(target))
+    assert not target.exists()
+    assert source.read_bytes() == b"original video"
+    assert list(target.parent.glob(".output-*.mp4")) == []
+
+
 def test_existing_destination_requires_approval(conversion):
     converter, source, target, run, _ = conversion
     target.write_bytes(b"existing")

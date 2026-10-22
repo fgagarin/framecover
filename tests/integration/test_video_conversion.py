@@ -91,7 +91,7 @@ def test_conversion_then_thumbnail_workflow(tmp_path, codec, profile, transcode)
         assert packets[2:] == original_packets[1:]
         with av.open(str(target)) as container:
             frames = list(container.decode(video=0))
-        assert len(frames) == 26
+        assert len(frames) == len(original_frames) + 1
         assert [frame.to_image().tobytes() for frame in frames[1:]] == original_frames
         video = loader.load(str(target))
         assert video.existing_thumbnail is not None
