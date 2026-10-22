@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from threading import Event
 from unittest.mock import MagicMock, patch
 
@@ -61,6 +62,23 @@ def window(qtbot, deps):  # type: ignore[type-arg]
 
 
 class TestMainWindowConstruction:
+    @pytest.mark.parametrize("saved_directory", [None, "", 123, "missing-directory"])
+    def test_invalid_saved_directory_falls_back_to_home(
+        self, qtbot, deps, saved_directory
+    ):
+        with patch("video_thumbnailer.ui.main_window.QSettings") as settings:
+            settings.return_value.value.return_value = saved_directory
+            window = MainWindow(*deps)
+        qtbot.addWidget(window)
+        assert window._last_open_directory == str(Path.home())
+
+    def test_existing_saved_directory_is_restored(self, qtbot, deps, tmp_path):
+        with patch("video_thumbnailer.ui.main_window.QSettings") as settings:
+            settings.return_value.value.return_value = str(tmp_path)
+            window = MainWindow(*deps)
+        qtbot.addWidget(window)
+        assert window._last_open_directory == str(tmp_path)
+
     def test_window_title(self, window: MainWindow) -> None:
         assert "Thumbnailer" in window.windowTitle() or "thumbnailer" in window.windowTitle().lower()
 

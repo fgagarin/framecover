@@ -162,7 +162,9 @@ class MainWindow(QMainWindow):
         )
         self._last_open_directory = (
             last_open_directory
-            if last_open_directory and Path(last_open_directory).is_dir()
+            if isinstance(last_open_directory, str)
+            and last_open_directory
+            and Path(last_open_directory).is_dir()
             else str(Path.home())
         )
 

@@ -59,7 +59,7 @@ source .venv/bin/activate        # Linux / macOS
 pip install -e ".[dev]"
 ```
 
-This installs the application along with all development tools (pytest, ruff, mypy, pyinstaller).
+This installs the application along with all development tools (pytest, ruff, ty, pyinstaller).
 
 ---
 
@@ -142,7 +142,7 @@ pytest tests/benchmarks/ --benchmark-only
 make test        # unit + integration tests
 make coverage    # tests with >=80% coverage gate
 make lint        # ruff linter
-make typecheck   # mypy --strict
+make typecheck   # ty check (src/ and scripts/)
 ```
 
 ---
@@ -236,5 +236,5 @@ tests/
 
 ```bash
 ruff check src/ tests/ scripts/    # linting
-mypy --strict src/         # type checking
+ty check                          # type checking (src/ and scripts/)
 ```

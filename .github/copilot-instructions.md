@@ -36,7 +36,7 @@ make sync         # uv sync --extra dev
 make test         # pytest tests/unit/ tests/integration/ -q
 make coverage     # same, with --cov-fail-under=80 gate (branch coverage)
 make lint         # ruff check src/ tests/
-make typecheck    # mypy --strict src/
+make typecheck    # ty check (src/ and scripts/)
 ```
 
 Run a single test (examples):
@@ -50,7 +50,7 @@ pytest tests/unit/test_frame_extractor.py -k "extract" -q
 - `tests/integration/` — exercises real per-format workflows (`test_mp4_workflow.py`, `test_mkv_workflow.py`, etc.) using ffmpeg-generated fixture videos from `tests/conftest.py` (via `imageio_ffmpeg`); no network access, no committed binary fixtures.
 - `tests/benchmarks/` — `pytest-benchmark`; run with `pytest tests/benchmarks/ --benchmark-only` (excluded from `make test`/CI's default `test` job, run separately in CI's `benchmark` job).
 - CI (`.github/workflows/ci.yml`) runs lint/typecheck/test/benchmark/dist across ubuntu/macos/windows; on Linux, `QT_QPA_PLATFORM=offscreen` is required for the Qt GUI tests to run headless.
-- `ruff` selects `E, F, I` only, line-length 88; `tests/**` is exempt from `E501` (long lines OK in tests). `mypy --strict` applies to `src/` only.
+- `ruff` selects `E, F, I` only, line-length 88; `tests/**` is exempt from `E501` (long lines OK in tests). `ty check` applies to `src/` and `scripts/`, targeting Python 3.13.
 
 ## Architecture
 

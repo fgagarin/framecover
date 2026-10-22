@@ -15,7 +15,7 @@ help:
 	@echo ""
 	@echo "  test         Run unit and integration tests"
 	@echo "  lint         Run ruff linter"
-	@echo "  typecheck    Run mypy strict type check"
+	@echo "  typecheck    Run ty type check"
 	@echo "  coverage     Run tests with >=80% coverage gate"
 	@echo "  changelog    Generate CHANGELOG.md from Conventional Commits"
 	@echo "  release      Commit and tag a release (VERSION=X.Y.Z, or auto)"
@@ -62,7 +62,7 @@ lint:
 	$(UV) run ruff check src/ tests/ scripts/
 
 typecheck:
-	$(UV) run mypy --strict src/
+	$(UV) run ty check
 
 coverage:
 	$(UV) run pytest --cov=video_thumbnailer \
@@ -73,6 +73,6 @@ coverage:
 # ── Housekeeping ──────────────────────────────────────────────────────────────
 
 clean:
-	rm -rf build/ dist/ __pycache__ .pytest_cache .mypy_cache \
+	rm -rf build/ dist/ __pycache__ .pytest_cache \
 		src/video_thumbnailer/__pycache__ \
 		*.egg-info

@@ -18,9 +18,9 @@ dev = [
     "pytest-cov>=5",
     "pytest-benchmark>=4",
     "ruff>=0.4",
-    "mypy>=1.10",
     "pyinstaller>=6.0",
     "git-changelog>=2.5,<3",
+    "ty>=0.0.90",
 ]
 
 [project.scripts]
@@ -42,9 +42,11 @@ select = ["E", "F", "I"]
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["E501"]
 
-[tool.mypy]
-strict = true
-python_version = "3.13"
+[tool.ty.environment]
+python-version = "3.13"
+
+[tool.ty.src]
+include = ["src", "scripts"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

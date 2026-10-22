@@ -24,7 +24,7 @@ jobs:
       - run: ruff check src/ tests/ scripts/
 
   typecheck:
-    name: Type Check
+    name: Type Check (ty)
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -35,7 +35,7 @@ jobs:
         with:
           python-version: "3.13"
       - run: pip install -e ".[dev]"
-      - run: mypy src/
+      - run: ty check --output-format github
 
   test:
     name: Test
