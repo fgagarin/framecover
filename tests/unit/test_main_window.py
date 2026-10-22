@@ -13,6 +13,7 @@ from PySide6.QtGui import QCloseEvent, QKeySequence
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
+from video_thumbnailer import __version__
 from video_thumbnailer.core.frame_extractor import PyAVFrameExtractor
 from video_thumbnailer.core.thumbnail_writer import FormatDispatchThumbnailWriter
 from video_thumbnailer.core.video_loader import PyAVVideoLoader
@@ -98,15 +99,39 @@ class TestMainWindowConstruction:
 
     def test_drop_zone_visible(self, window: MainWindow) -> None:
         assert window._drop_label.isVisible()
+        assert "1 — Open a video" in window._drop_label.text()
+        assert "2 — Choose a frame" in window._drop_label.text()
+        assert "3 — Save the preview" in window._drop_label.text()
 
-    def test_default_window_is_wide(self, qtbot, deps) -> None:
-        # Window managers can clamp the size to the screen after show().
+    def test_start_screen_shows_test_build_metadata_and_links(
+        self, window: MainWindow
+    ) -> None:
+        info = window._start_info_label
+        assert "Test build" in info.text()
+        assert "Release date not set" in info.text()
+        assert __version__ in info.text()
+        assert "Fedor Gagarin" in info.text()
+        assert "LICENSE" in info.text()
+        assert "fgagarin.github.io/video-thumbnailer" in info.text()
+        assert "CHANGELOG.md#unreleased" in info.text()
+        assert info.openExternalLinks()
+        assert info.isVisible()
+
+    def test_default_window_is_compact(self, qtbot, deps) -> None:
         window = MainWindow(*deps)
         qtbot.addWidget(window)
-        assert window.width() >= 1200
-        assert window.height() >= 700
+        assert window.width() == 900
+        assert window.height() == 560
 
 class TestMainWindowVideoLoading:
+    def test_window_expands_after_video_load(self, window: MainWindow) -> None:
+        initial_size = window.size()
+
+        window._on_video_loaded(_make_vf())
+
+        assert window.width() > initial_size.width()
+        assert window.height() > initial_size.height()
+
     def test_unsupported_load_offers_conversion(self, window, deps):
         from video_thumbnailer.exceptions import UnsupportedFormatError
 
@@ -118,7 +143,7 @@ class TestMainWindowVideoLoading:
             window._load_video("clip.m2ts")
         question.assert_called_once()
         assert window._conversion_dialog is None
-        assert window._drop_label.text() == "Drop a video file here"
+        assert "1 — Open a video" in window._drop_label.text()
 
     def test_conversion_save_cancel_does_not_start_worker(self, window):
         with (
@@ -196,6 +221,7 @@ class TestMainWindowVideoLoading:
         assert window._video is vf
         assert window._timeline.isEnabled()
         assert window._preview.isVisible()
+        assert not window._start_info_label.isVisible()
         assert window._filmstrip.isVisible()
         assert window._timeline.isVisible()
         assert window._apply_btn.isVisible()
@@ -408,6 +434,7 @@ class TestMainWindowVideoLoading:
         mock_msg.assert_called_once()
         # Drop label should revert to placeholder text
         assert "Drop" in window._drop_label.text()
+        assert window._start_info_label.isVisible()
 
     def test_drop_label_text_after_load(self, window: MainWindow) -> None:
         vf = _make_vf("/video/test.mp4")

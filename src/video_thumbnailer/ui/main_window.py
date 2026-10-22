@@ -48,6 +48,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from video_thumbnailer import __version__
 from video_thumbnailer.core.video_converter import FFmpegVideoConverter
 from video_thumbnailer.models import ApplyResult, TimelinePosition, VideoFile
 from video_thumbnailer.ui.filmstrip_widget import FilmstripWidget
@@ -69,6 +70,22 @@ if TYPE_CHECKING:
 __all__ = ["MainWindow"]
 
 _DROP_ZONE_MIN_HEIGHT = 200
+_START_SCREEN_TEXT = (
+    "Drop a video file here or click to open\n\n"
+    "1 — Open a video\n"
+    "2 — Choose a frame\n"
+    "3 — Save the preview"
+)
+_START_INFO_TEXT = (
+    f"<b>Test build</b> · Release date not set<br>"
+    f"Version: {__version__} · Author: Fedor Gagarin<br>"
+    'License: <a href="https://github.com/fgagarin/video-thumbnailer/blob/main/LICENSE">'
+    "MIT</a><br>"
+    '<a href="https://fgagarin.github.io/video-thumbnailer/">Project page</a>'
+    " · "
+    f'<a href="https://github.com/fgagarin/video-thumbnailer/blob/main/CHANGELOG.md#unreleased">'
+    f"Changelog {__version__} (Unreleased)</a>"
+)
 _VIDEO_FILE_FILTER = (
     "Video files (*.mp4 *.mov *.m4v *.mkv *.webm *.avi *.flv "
     "*.m2ts *.mts *.ts *.mpeg *.mpg *.wmv *.vob *.mxf *.3gp *.ogv);;All files (*)"
@@ -170,7 +187,7 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle("Video Thumbnailer")
         self.setMinimumSize(900, 560)
-        self.resize(1280, 720)
+        self.resize(900, 560)
         self.setAcceptDrops(True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
@@ -189,7 +206,7 @@ class MainWindow(QMainWindow):
         layout.setSpacing(12)
 
         # Drop zone
-        self._drop_label = _ClickableLabel("Drop a video file here")
+        self._drop_label = _ClickableLabel(_START_SCREEN_TEXT)
         self._drop_label.setMinimumHeight(_DROP_ZONE_MIN_HEIGHT)
         self._drop_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._drop_label.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -208,6 +225,17 @@ class MainWindow(QMainWindow):
             "}"
         )
         layout.addWidget(self._drop_label)
+
+        self._start_info_label = QLabel(_START_INFO_TEXT)
+        self._start_info_label.setTextFormat(Qt.TextFormat.RichText)
+        self._start_info_label.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextBrowserInteraction
+        )
+        self._start_info_label.setOpenExternalLinks(True)
+        self._start_info_label.setWordWrap(True)
+        self._start_info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._start_info_label.setStyleSheet("color: #777777; font-size: 12px;")
+        layout.addWidget(self._start_info_label)
 
         self._path_container = QWidget()
         path_layout = QHBoxLayout(self._path_container)
@@ -330,7 +358,7 @@ class MainWindow(QMainWindow):
 
     def _offer_conversion(self, path: str) -> None:
         self._set_busy(False)
-        self._drop_label.setText("Drop a video file here")
+        self._drop_label.setText(_START_SCREEN_TEXT)
         answer = QMessageBox.question(
             self,
             "Convert to MP4?",
@@ -387,6 +415,7 @@ class MainWindow(QMainWindow):
         QMessageBox.critical(self, "Conversion Error", message)
 
     def _on_video_loaded(self, video: VideoFile) -> None:
+        self.resize(1280, 720)
         self._video = video
         self._current_frame = None
         self._current_frame_position_ms = None
@@ -398,6 +427,7 @@ class MainWindow(QMainWindow):
         self._timeline.set_duration(video.duration_ms)
         self._timeline.setEnabled(True)
         self._drop_label.hide()
+        self._start_info_label.hide()
         self._path_label.setText(video.path)
         self._path_container.show()
         self._filmstrip.set_video(video, self._extractor)
@@ -414,8 +444,9 @@ class MainWindow(QMainWindow):
         self._on_scrub(self._timeline.current_position_ms())
 
     def _on_load_error(self, message: str) -> None:
-        self._drop_label.setText("Drop a video file here")
+        self._drop_label.setText(_START_SCREEN_TEXT)
         self._drop_label.show()
+        self._start_info_label.show()
         self._path_container.hide()
         self._preview.hide()
         self._timeline.hide()
