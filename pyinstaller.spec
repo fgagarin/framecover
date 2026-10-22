@@ -46,6 +46,8 @@ a = Analysis(
         "PIL.Image",
         "PIL.JpegImagePlugin",
         "PySide6",
+        # PyInstaller's automatic import checks the absent PySide6 metapackage.
+        "PySide6.support.deprecated",
         "PySide6.QtWidgets",
         "PySide6.QtCore",
         "PySide6.QtGui",

@@ -41,7 +41,7 @@ video-thumbnailer
 - Python 3.13+
 - [uv](https://github.com/astral-sh/uv) or `pip` (for environment setup)
 
-Dependency baseline: PySide6 6.12.0, PyAV 19.0.2, Pillow 13.0.0,
+Dependency baseline: PySide6-Essentials 6.12.0, PyAV 19.0.2, Pillow 13.0.0,
 imageio-ffmpeg 0.6.0, and mutagen 1.48.1. Exact runtime and development versions
 are recorded in `uv.lock`; use `uv sync --frozen --extra dev` to reproduce them.
 The upgraded stack was validated on Windows with Python 3.14, including native
@@ -66,6 +66,18 @@ pip install -e ".[dev]"
 ```
 
 This installs the application along with all development tools (pytest, ruff, ty, pyinstaller).
+
+The GUI uses `PySide6-Essentials`, which provides the `PySide6` imports needed
+by the application and Qt tests without installing the Addons, WebEngine, or PDF
+packages. The full `PySide6` metapackage is not required.
+
+When migrating an existing environment from full PySide6, uninstalling its
+overlapping packages can remove shared bootstrap files. If Qt imports fail after
+`uv sync --frozen --extra dev`, restore the Essentials files:
+
+```bash
+uv sync --frozen --extra dev --reinstall-package pyside6-essentials --reinstall-package shiboken6
+```
 
 ---
 
