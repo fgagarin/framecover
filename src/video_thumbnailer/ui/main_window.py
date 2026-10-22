@@ -593,7 +593,12 @@ class MainWindow(QMainWindow):
     def _start_apply(
         self, *, destination: str | None = None, overwrite: bool = False
     ) -> None:
-        if self._video is None or self._current_frame is None or self._saving:
+        if (
+            self._video is None
+            or self._current_frame is None
+            or self._saving
+            or self._frame_extract_active
+        ):
             return
         self._saving = True
         self._start_save_state()

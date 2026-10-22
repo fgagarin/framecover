@@ -169,4 +169,6 @@ def save_copy(
             try:
                 temporary.unlink(missing_ok=True)
             except OSError:
-                logger.warning("Could not remove staged copy %s", temporary, exc_info=True)
+                logger.warning(
+                    "Could not remove staged copy %s", temporary, exc_info=True
+                )

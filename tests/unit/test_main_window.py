@@ -819,6 +819,18 @@ class TestCopySaveChoices:
         window._on_video_loaded(_make_vf("/fake/other.mov"))
         assert window._copy_destination is None
 
+    def test_save_during_extraction_does_not_use_stale_frame(self, window):
+        window._frame_extract_active = True
+        with patch.object(window._pool, "start") as start:
+            window._on_apply_clicked()
+        start.assert_not_called()
+
+    def test_save_prevents_filmstrip_from_changing_selected_position(self, window):
+        window._saving = True
+        position = window._timeline.current_position_ms()
+        window._on_filmstrip_position_selected(4000)
+        assert window._timeline.current_position_ms() == position
+
 
 # ---------------------------------------------------------------------------
 # _pil_to_pixmap helper
