@@ -11,16 +11,16 @@ from typing import TYPE_CHECKING
 from PIL import Image
 from PySide6.QtCore import QObject, QRunnable, Signal, Slot
 
-from video_thumbnailer.core.save_copy import save_copy
-from video_thumbnailer.exceptions import UnsupportedFormatError
-from video_thumbnailer.models import TimelinePosition, VideoFile
+from framecover.core.save_copy import save_copy
+from framecover.exceptions import UnsupportedFormatError
+from framecover.models import TimelinePosition, VideoFile
 
 if TYPE_CHECKING:
-    from video_thumbnailer.core.frame_extractor import PyAVFrameExtractor
-    from video_thumbnailer.core.thumbnail_writer import FormatDispatchThumbnailWriter
-    from video_thumbnailer.core.video_converter import FFmpegVideoConverter
-    from video_thumbnailer.core.video_loader import PyAVVideoLoader
-    from video_thumbnailer.platform import CacheInvalidator
+    from framecover.core.frame_extractor import PyAVFrameExtractor
+    from framecover.core.thumbnail_writer import FormatDispatchThumbnailWriter
+    from framecover.core.video_converter import FFmpegVideoConverter
+    from framecover.core.video_loader import PyAVVideoLoader
+    from framecover.platform import CacheInvalidator
 
 __all__ = [
     "VideoLoadWorker", "VideoConvertWorker", "FrameExtractWorker", "ApplyWorker",

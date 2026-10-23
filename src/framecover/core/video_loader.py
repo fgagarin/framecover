@@ -8,9 +8,9 @@ from typing import TYPE_CHECKING
 import av
 from PIL import Image
 
-from video_thumbnailer.core.thumbnail_metadata import read_thumbnail_source
-from video_thumbnailer.exceptions import NoVideoStreamError, UnsupportedFormatError
-from video_thumbnailer.models import VideoFile, VideoFormat
+from framecover.core.thumbnail_metadata import read_thumbnail_source
+from framecover.exceptions import NoVideoStreamError, UnsupportedFormatError
+from framecover.models import VideoFile, VideoFormat
 
 if TYPE_CHECKING:
     pass

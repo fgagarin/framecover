@@ -1,4 +1,4 @@
-"""video-thumbnailer package."""
+"""FrameCover package."""
 
 from __future__ import annotations
 

@@ -12,9 +12,9 @@ import pytest
 from mutagen.mp4 import MP4
 from PIL import Image, ImageStat
 
-from video_thumbnailer.core.thumbnail_writer import FormatDispatchThumbnailWriter
-from video_thumbnailer.core.video_loader import PyAVVideoLoader
-from video_thumbnailer.models import ApplyError, VideoFile, VideoFormat
+from framecover.core.thumbnail_writer import FormatDispatchThumbnailWriter
+from framecover.core.video_loader import PyAVVideoLoader
+from framecover.models import ApplyError, VideoFile, VideoFormat
 
 
 @pytest.fixture()
@@ -81,7 +81,7 @@ class TestThumbnailWriter:
         mocked_container.streams.video = [stream]
         mocked_container.__enter__.return_value = mocked_container
         with patch(
-            "video_thumbnailer.core.thumbnail_writer.av.open",
+            "framecover.core.thumbnail_writer.av.open",
             return_value=mocked_container,
         ):
             reason = writer.reencode_reason(video)
@@ -213,7 +213,7 @@ class TestThumbnailWriter:
         video = loader.load(str(sample_video))
 
         with patch(
-            "video_thumbnailer.core.thumbnail_writer.subprocess.run",
+            "framecover.core.thumbnail_writer.subprocess.run",
             wraps=subprocess.run,
         ) as run:
             result = writer.write(video, sample_pil_image)

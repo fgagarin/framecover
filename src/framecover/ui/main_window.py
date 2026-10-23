@@ -1,4 +1,4 @@
-"""Main application window for video-thumbnailer."""
+"""Main application window for FrameCover."""
 
 from __future__ import annotations
 
@@ -50,22 +50,22 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from video_thumbnailer.core.video_converter import FFmpegVideoConverter
-from video_thumbnailer.models import (
+from framecover.core.video_converter import FFmpegVideoConverter
+from framecover.models import (
     ApplyError,
     ApplyResult,
     TimelinePosition,
     VideoFile,
 )
-from video_thumbnailer.ui.error_dialog import (
+from framecover.ui.error_dialog import (
     ErrorDialog,
     build_operation_error_report,
 )
-from video_thumbnailer.ui.filmstrip_widget import FilmstripWidget
-from video_thumbnailer.ui.preview_widget import PreviewWidget
-from video_thumbnailer.ui.start_screen import AppFooter, StartScreen
-from video_thumbnailer.ui.timeline_widget import TimelineWidget
-from video_thumbnailer.ui.worker import (
+from framecover.ui.filmstrip_widget import FilmstripWidget
+from framecover.ui.preview_widget import PreviewWidget
+from framecover.ui.start_screen import AppFooter, StartScreen
+from framecover.ui.timeline_widget import TimelineWidget
+from framecover.ui.worker import (
     ApplyWorker,
     FrameExtractWorker,
     VideoConvertWorker,
@@ -73,10 +73,10 @@ from video_thumbnailer.ui.worker import (
 )
 
 if TYPE_CHECKING:
-    from video_thumbnailer.core.frame_extractor import PyAVFrameExtractor
-    from video_thumbnailer.core.thumbnail_writer import FormatDispatchThumbnailWriter
-    from video_thumbnailer.core.video_loader import PyAVVideoLoader
-    from video_thumbnailer.platform import CacheInvalidator
+    from framecover.core.frame_extractor import PyAVFrameExtractor
+    from framecover.core.thumbnail_writer import FormatDispatchThumbnailWriter
+    from framecover.core.video_loader import PyAVVideoLoader
+    from framecover.platform import CacheInvalidator
 
 __all__ = ["MainWindow"]
 
@@ -170,7 +170,8 @@ class MainWindow(QMainWindow):
         self._save_spinner = QTimer(self)
         self._save_spinner.setInterval(80)
         self._save_spinner.timeout.connect(self._advance_save_spinner)
-        self._settings = QSettings("Video Thumbnailer", "Video Thumbnailer")
+        self._settings = QSettings("FrameCover", "FrameCover")
+        _migrate_legacy_settings(self._settings)
         last_open_directory = self._settings.value(
             "lastOpenDirectory", str(Path.home()), type=str
         )
@@ -182,7 +183,7 @@ class MainWindow(QMainWindow):
             else str(Path.home())
         )
 
-        self.setWindowTitle("Video Thumbnailer")
+        self.setWindowTitle("FrameCover")
         self.setMinimumSize(900, 560)
         self.resize(900, 560)
         self.setAcceptDrops(True)
@@ -778,6 +779,18 @@ class MainWindow(QMainWindow):
         lower = video.duration_ms // 3
         upper = video.duration_ms * 2 // 3
         return random.randint(lower, max(lower, upper))
+
+def _migrate_legacy_settings(settings: QSettings) -> None:
+    """Copy preferences saved under the pre-FrameCover application name.
+
+    Args:
+        settings: The current FrameCover settings store.
+    """
+    if settings.contains("lastOpenDirectory"):
+        return
+    legacy = QSettings("Video Thumbnailer", "Video Thumbnailer")
+    if legacy.contains("lastOpenDirectory"):
+        settings.setValue("lastOpenDirectory", legacy.value("lastOpenDirectory"))
 
 def _pil_to_pixmap(image: Image.Image) -> QPixmap:
     """Convert a PIL Image to a QPixmap."""

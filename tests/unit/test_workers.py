@@ -6,16 +6,16 @@ from unittest.mock import MagicMock
 
 from PIL import Image
 
-from video_thumbnailer.core.frame_extractor import PyAVFrameExtractor
-from video_thumbnailer.core.thumbnail_writer import FormatDispatchThumbnailWriter
-from video_thumbnailer.core.video_loader import PyAVVideoLoader
-from video_thumbnailer.models import (
+from framecover.core.frame_extractor import PyAVFrameExtractor
+from framecover.core.thumbnail_writer import FormatDispatchThumbnailWriter
+from framecover.core.video_loader import PyAVVideoLoader
+from framecover.models import (
     ApplyResult,
     TimelinePosition,
     VideoFile,
     VideoFormat,
 )
-from video_thumbnailer.ui.worker import (
+from framecover.ui.worker import (
     ApplyWorker,
     FrameExtractWorker,
     VideoConvertWorker,
@@ -55,7 +55,7 @@ def _run_worker(worker):
 
 class TestVideoLoadWorker:
     def test_unsupported_format_emits_conversion_path(self):
-        from video_thumbnailer.exceptions import UnsupportedFormatError
+        from framecover.exceptions import UnsupportedFormatError
 
         loader = MagicMock(spec=PyAVVideoLoader)
         loader.load.side_effect = UnsupportedFormatError("clip.m2ts")
@@ -133,7 +133,7 @@ class TestFrameExtractWorker:
         assert errors == []
 
     def test_run_error_emits_error_string(self) -> None:
-        from video_thumbnailer.exceptions import ExtractionError
+        from framecover.exceptions import ExtractionError
 
         extractor = MagicMock(spec=PyAVFrameExtractor)
         extractor.extract.side_effect = ExtractionError("/fake.mp4", 2000, "codec fail")
@@ -149,7 +149,7 @@ class TestFrameExtractWorker:
         assert "Traceback (most recent call last):" in errors[0]
 
     def test_chained_decode_error_preserves_cause(self) -> None:
-        from video_thumbnailer.exceptions import ExtractionError
+        from framecover.exceptions import ExtractionError
 
         def fail(video, position):
             try:
@@ -227,7 +227,7 @@ class TestApplyWorker:
 
     def test_run_failure_result_skips_invalidator(self) -> None:
         writer = MagicMock(spec=FormatDispatchThumbnailWriter)
-        from video_thumbnailer.models import ApplyError
+        from framecover.models import ApplyError
         writer.write.return_value = ApplyResult(
             success=False,
             error_code=ApplyError.FFMPEG_ERROR,
@@ -303,7 +303,7 @@ class TestApplyWorker:
         finished, errors = _run_worker(
             ApplyWorker(writer, invalidator, vf, thumbnail, destination=str(destination))
         )
-        from video_thumbnailer.models import ApplyError
+        from framecover.models import ApplyError
 
         assert errors == []
         assert finished[0].error_code is ApplyError.DESTINATION_EXISTS

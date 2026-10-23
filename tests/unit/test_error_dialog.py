@@ -11,9 +11,9 @@ from PySide6.QtCore import QUrl
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QDialog, QWidget
 
-from video_thumbnailer import __version__
-from video_thumbnailer.models import ApplyError
-from video_thumbnailer.ui.error_dialog import (
+from framecover import __version__
+from framecover.models import ApplyError
+from framecover.ui.error_dialog import (
     GITHUB_ISSUES_URL,
     ErrorDialog,
     ErrorReport,
@@ -57,7 +57,7 @@ class TestFormatting:
     def test_google_prompt_requests_safe_help_for_nonprogrammer(self) -> None:
         report = _raise_and_capture()
         query = parse_qs(urlparse(build_google_search_url(report)).query)["q"][0]
-        assert f"I'm using Video Thumbnailer {__version__} on {sys.platform}" in query
+        assert f"I'm using FrameCover {__version__} on {sys.platform}" in query
         assert "I don't know how to program" in query
         assert "plain language" in query
         assert "safe, numbered steps" in query

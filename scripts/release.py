@@ -15,7 +15,7 @@ from semver import Version
 __all__ = ["main"]
 
 _RELEASE_FILES = (
-    "CHANGELOG.md", "pyproject.toml", "src/video_thumbnailer/__init__.py", "uv.lock",
+    "CHANGELOG.md", "pyproject.toml", "src/framecover/__init__.py", "uv.lock",
 )
 _VERSION_PATTERN = r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
 
@@ -87,7 +87,7 @@ def create_release(requested: str, uv: str) -> None:
         Path("pyproject.toml"), r'^(version\s*=\s*)"[^"]+"', version
     )
     _replace_version(
-        Path("src/video_thumbnailer/__init__.py"),
+        Path("src/framecover/__init__.py"),
         r'^(__version__\s*=\s*)"[^"]+"', version,
     )
     Path("CHANGELOG.md").write_text(changelog + "\n", encoding="utf-8")
@@ -111,7 +111,7 @@ def release_notes(tag: str, output: Path) -> None:
         raise ValueError("Tag and project version do not match.")
     declaration = re.search(
         r'^__version__\s*=\s*"([^"]+)"',
-        Path("src/video_thumbnailer/__init__.py").read_text("utf-8"),
+        Path("src/framecover/__init__.py").read_text("utf-8"),
         flags=re.MULTILINE,
     )
     if declaration is None or declaration[1] != version:
@@ -119,7 +119,7 @@ def release_notes(tag: str, output: Path) -> None:
     with Path("uv.lock").open("rb") as stream:
         packages = tomllib.load(stream)["package"]
     if not any(
-        item["name"] == "video-thumbnailer" and item["version"] == version
+        item["name"] == "framecover" and item["version"] == version
         for item in packages
     ):
         raise ValueError("Tag and lockfile version do not match.")
@@ -144,15 +144,15 @@ def release_notes(tag: str, output: Path) -> None:
 def package_distribution(platform: str, output: Path) -> None:
     """Package a native PyInstaller build, preserving Unix executable modes."""
     version = _version(_project_version())
-    name = f"video-thumbnailer-{version}-{platform}"
+    name = f"framecover-{version}-{platform}"
     output.mkdir(parents=True, exist_ok=True)
     if platform == "windows":
         (output / f"{name}.exe").write_bytes(
-            Path("dist/video-thumbnailer.exe").read_bytes()
+            Path("dist/framecover.exe").read_bytes()
         )
     else:
         source = Path("dist") / (
-            "video-thumbnailer.app" if platform == "macos" else "video-thumbnailer"
+            "framecover.app" if platform == "macos" else "framecover"
         )
         with tarfile.open(output / f"{name}.tar.gz", "w:gz") as archive:
             archive.add(source, arcname=source.name)

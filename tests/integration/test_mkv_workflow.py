@@ -10,10 +10,10 @@ import av
 import imageio_ffmpeg
 from PIL import Image
 
-from video_thumbnailer.core.frame_extractor import PyAVFrameExtractor
-from video_thumbnailer.core.thumbnail_writer import FormatDispatchThumbnailWriter
-from video_thumbnailer.core.video_loader import PyAVVideoLoader
-from video_thumbnailer.models import TimelinePosition
+from framecover.core.frame_extractor import PyAVFrameExtractor
+from framecover.core.thumbnail_writer import FormatDispatchThumbnailWriter
+from framecover.core.video_loader import PyAVVideoLoader
+from framecover.models import TimelinePosition
 
 _FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
 

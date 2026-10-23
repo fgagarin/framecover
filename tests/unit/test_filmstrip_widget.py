@@ -9,8 +9,8 @@ from PIL import Image
 from PySide6.QtCore import QPoint, Qt
 from PySide6.QtTest import QTest
 
-from video_thumbnailer.models import VideoFile, VideoFormat
-from video_thumbnailer.ui.filmstrip_widget import FilmstripWidget
+from framecover.models import VideoFile, VideoFormat
+from framecover.ui.filmstrip_widget import FilmstripWidget
 
 
 @pytest.fixture()

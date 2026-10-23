@@ -6,7 +6,7 @@ import pytest
 from PySide6.QtCore import QPoint, Qt
 from PySide6.QtTest import QTest
 
-from video_thumbnailer.ui.timeline_widget import TimelineWidget
+from framecover.ui.timeline_widget import TimelineWidget
 
 
 @pytest.fixture()

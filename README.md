@@ -1,4 +1,4 @@
-# video-thumbnailer
+# FrameCover
 
 Many video players and file managers generate a thumbnail by grabbing the first frame of the video — which is often a black screen, a title card, or a fade-in. This tool lets you scrub to any frame you like and embed it as the video's cover art, so the thumbnail actually shows something meaningful.
 
@@ -31,7 +31,7 @@ python3.13 -m venv .venv
 source .venv/bin/activate        # Linux / macOS
 # .venv\Scripts\activate         # Windows
 pip install -e ".[dev]"
-video-thumbnailer
+framecover
 ```
 
 ---
@@ -84,13 +84,13 @@ uv sync --frozen --extra dev --reinstall-package pyside6-essentials --reinstall-
 ## Running the application
 
 ```bash
-video-thumbnailer
+framecover
 ```
 
 Or directly via the module:
 
 ```bash
-python -m video_thumbnailer.app
+python -m framecover.app
 ```
 
 Typical workflow:
@@ -170,7 +170,7 @@ pytest tests/unit/ tests/integration/ -q
 ### Run with coverage (≥80% gate)
 
 ```bash
-pytest --cov=video_thumbnailer \
+pytest --cov=framecover \
        --cov-report=term-missing \
        --cov-fail-under=80 \
        tests/unit/ tests/integration/
@@ -204,9 +204,9 @@ make typecheck   # ty check (src/ and scripts/)
 Single-file executables are produced via [PyInstaller](https://pyinstaller.org).
 
 ```bash
-make dist-linux    # → dist/linux/video-thumbnailer
-make dist-macos    # → dist/macos/video-thumbnailer.app
-make dist-windows  # → dist/windows/video-thumbnailer.exe
+make dist-linux    # → dist/linux/framecover
+make dist-macos    # → dist/macos/framecover.app
+make dist-windows  # → dist/windows/framecover.exe
 ```
 
 Or manually:
@@ -273,7 +273,7 @@ No release is created while merely installing these tools.
 
 ```
 src/
-  video_thumbnailer/
+  framecover/
     app.py          # Entry point
     models.py       # VideoFile, VideoFormat, TimelinePosition
     exceptions.py   # Domain exceptions
@@ -291,7 +291,7 @@ tests/
 ## Landing page (GitHub Pages)
 
 The English-language landing page is published at
-<https://fgagarin.github.io/video-thumbnailer/>. Its dependency-free HTML, CSS and
+<https://fgagarin.github.io/framecover/>. Its dependency-free HTML, CSS and
 JavaScript live in `site/`; screenshots and the icon are reused from the repository
 root. No frontend build or package installation is required.
 

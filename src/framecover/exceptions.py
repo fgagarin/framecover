@@ -1,9 +1,9 @@
-"""Custom exceptions for video-thumbnailer."""
+"""Custom exceptions for FrameCover."""
 
 from __future__ import annotations
 
 __all__ = [
-    "VideoThumbnailerError",
+    "FrameCoverError",
     "UnsupportedFormatError",
     "NoVideoStreamError",
     "ExtractionError",
@@ -11,15 +11,15 @@ __all__ = [
 ]
 
 
-class VideoThumbnailerError(RuntimeError):
-    """Base exception for all video-thumbnailer errors."""
+class FrameCoverError(RuntimeError):
+    """Base exception for all FrameCover errors."""
 
 
-class ConversionError(VideoThumbnailerError):
+class ConversionError(FrameCoverError):
     """Raised when FFmpeg cannot convert a video to MP4."""
 
 
-class UnsupportedFormatError(VideoThumbnailerError):
+class UnsupportedFormatError(FrameCoverError):
     """Raised when a file's container format is not recognised or supported.
 
     Attributes:
@@ -34,7 +34,7 @@ class UnsupportedFormatError(VideoThumbnailerError):
         )
 
 
-class NoVideoStreamError(VideoThumbnailerError):
+class NoVideoStreamError(FrameCoverError):
     """Raised when a file contains no video stream (e.g. audio-only file).
 
     Attributes:
@@ -49,7 +49,7 @@ class NoVideoStreamError(VideoThumbnailerError):
         )
 
 
-class ExtractionError(VideoThumbnailerError):
+class ExtractionError(FrameCoverError):
     """Raised when a frame cannot be decoded at the requested position.
 
     Attributes:

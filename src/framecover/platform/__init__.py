@@ -1,4 +1,4 @@
-"""Platform package for video-thumbnailer.
+"""Platform package for FrameCover.
 
 Provides the CacheInvalidator protocol and a factory function that returns the
 platform-appropriate implementation at runtime.
@@ -10,7 +10,7 @@ import sys
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
-    from video_thumbnailer.models import VideoFile
+    from framecover.models import VideoFile
 
 __all__ = [
     "CacheInvalidator",
@@ -49,15 +49,15 @@ def get_cache_invalidator() -> CacheInvalidator:
         RuntimeError: If the current platform is not supported.
     """
     if sys.platform == "linux":
-        from video_thumbnailer.platform.cache_linux import LinuxCacheInvalidator
+        from framecover.platform.cache_linux import LinuxCacheInvalidator
 
         return LinuxCacheInvalidator()
     if sys.platform == "darwin":
-        from video_thumbnailer.platform.cache_macos import MacOSCacheInvalidator
+        from framecover.platform.cache_macos import MacOSCacheInvalidator
 
         return MacOSCacheInvalidator()
     if sys.platform == "win32":
-        from video_thumbnailer.platform.cache_windows import WindowsCacheInvalidator
+        from framecover.platform.cache_windows import WindowsCacheInvalidator
 
         return WindowsCacheInvalidator()
     raise RuntimeError(f"Unsupported platform: {sys.platform}")

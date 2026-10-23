@@ -19,9 +19,9 @@ import av
 import imageio_ffmpeg  # type: ignore[import-untyped]
 from PIL import Image
 
-from video_thumbnailer.core.atomic_write import atomic_replace
-from video_thumbnailer.core.thumbnail_metadata import write_thumbnail_source
-from video_thumbnailer.models import ApplyError, ApplyResult, VideoFile, VideoFormat
+from framecover.core.atomic_write import atomic_replace
+from framecover.core.thumbnail_metadata import write_thumbnail_source
+from framecover.models import ApplyError, ApplyResult, VideoFile, VideoFormat
 
 __all__ = ["FormatDispatchThumbnailWriter"]
 

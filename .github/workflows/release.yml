@@ -85,6 +85,6 @@ jobs:
         run: |
           gh release create "$RELEASE_TAG" \
             --verify-tag \
-            --title "Video Thumbnailer $RELEASE_TAG" \
+            --title "FrameCover $RELEASE_TAG" \
             --notes-file release-assets/release-notes.md \
             release-assets/*.tar.gz release-assets/*.exe release-assets/CHANGELOG.md

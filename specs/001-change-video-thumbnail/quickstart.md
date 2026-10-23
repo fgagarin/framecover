@@ -30,7 +30,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 ```bash
 # Clone and enter the repo
 git clone <repo-url>
-cd video-thumbnailer
+cd framecover
 
 # Create virtual environment and install all dependencies
 uv venv
@@ -46,7 +46,7 @@ ffmpeg -version | head -1
 ## Run the Application
 
 ```bash
-python -m video_thumbnailer
+python -m framecover
 ```
 
 The application window opens. Drag any supported video file (MP4, MOV, MKV, AVI, WebM,
@@ -67,7 +67,7 @@ pytest tests/unit/
 pytest tests/integration/
 
 # With coverage report (enforces ≥80% branch coverage)
-pytest --cov=video_thumbnailer --cov-report=term-missing --cov-fail-under=80
+pytest --cov=framecover --cov-report=term-missing --cov-fail-under=80
 
 # Benchmark tests (frame extraction performance gate)
 pytest tests/benchmarks/ --benchmark-only
@@ -104,8 +104,8 @@ ruff format src/ tests/
 ## Project Structure Reference
 
 ```text
-src/video_thumbnailer/
-├── app.py                    # Entry point: python -m video_thumbnailer
+src/framecover/
+├── app.py                    # Entry point: python -m framecover
 ├── ui/                       # PySide6 widgets
 │   ├── main_window.py        # MainWindow, drag-drop, layout
 │   ├── timeline_widget.py    # Custom scrubber widget
@@ -159,9 +159,9 @@ uv pip install pyinstaller
 
 | Platform | Command           | Output path              |
 |----------|-------------------|--------------------------|
-| Linux    | `make dist-linux`  | `dist/linux/video-thumbnailer` |
-| macOS    | `make dist-macos`  | `dist/macos/video-thumbnailer` |
-| Windows  | `make dist-windows`| `dist/windows/video-thumbnailer.exe` |
+| Linux    | `make dist-linux`  | `dist/linux/framecover` |
+| macOS    | `make dist-macos`  | `dist/macos/framecover` |
+| Windows  | `make dist-windows`| `dist/windows/framecover.exe` |
 
 Each target produces a single self-contained binary that bundles the Python
 runtime, Qt libraries, PyAV (with the bundled `imageio-ffmpeg` binary), and

@@ -13,19 +13,19 @@ from PySide6.QtGui import QCloseEvent, QKeySequence
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QFileDialog, QMessageBox, QToolButton
 
-from video_thumbnailer import __version__
-from video_thumbnailer.core.frame_extractor import PyAVFrameExtractor
-from video_thumbnailer.core.thumbnail_writer import FormatDispatchThumbnailWriter
-from video_thumbnailer.core.video_loader import PyAVVideoLoader
-from video_thumbnailer.models import (
+from framecover import __version__
+from framecover.core.frame_extractor import PyAVFrameExtractor
+from framecover.core.thumbnail_writer import FormatDispatchThumbnailWriter
+from framecover.core.video_loader import PyAVVideoLoader
+from framecover.models import (
     ApplyError,
     ApplyResult,
     VideoFile,
     VideoFormat,
 )
-from video_thumbnailer.platform import CacheInvalidator
-from video_thumbnailer.ui.error_dialog import ErrorDialog
-from video_thumbnailer.ui.main_window import MainWindow, _pil_to_pixmap
+from framecover.platform import CacheInvalidator
+from framecover.ui.error_dialog import ErrorDialog
+from framecover.ui.main_window import MainWindow, _pil_to_pixmap
 
 
 def _make_vf(path: str = "/fake/video.mp4", *, with_thumb: bool = False) -> VideoFile:
@@ -68,21 +68,36 @@ class TestMainWindowConstruction:
     def test_invalid_saved_directory_falls_back_to_home(
         self, qtbot, deps, saved_directory
     ):
-        with patch("video_thumbnailer.ui.main_window.QSettings") as settings:
+        with patch("framecover.ui.main_window.QSettings") as settings:
             settings.return_value.value.return_value = saved_directory
             window = MainWindow(*deps)
         qtbot.addWidget(window)
         assert window._last_open_directory == str(Path.home())
 
     def test_existing_saved_directory_is_restored(self, qtbot, deps, tmp_path):
-        with patch("video_thumbnailer.ui.main_window.QSettings") as settings:
+        with patch("framecover.ui.main_window.QSettings") as settings:
             settings.return_value.value.return_value = str(tmp_path)
             window = MainWindow(*deps)
         qtbot.addWidget(window)
         assert window._last_open_directory == str(tmp_path)
 
     def test_window_title(self, window: MainWindow) -> None:
-        assert "Thumbnailer" in window.windowTitle() or "thumbnailer" in window.windowTitle().lower()
+        assert "FrameCover" in window.windowTitle()
+
+    @pytest.mark.parametrize("current_value", [None, "current"])
+    def test_legacy_settings_are_migrated_once(self, tmp_path, current_value):
+        from framecover.ui.main_window import _migrate_legacy_settings
+
+        current = QSettings(str(tmp_path / "new.ini"), QSettings.Format.IniFormat)
+        if current_value is not None:
+            current.setValue("lastOpenDirectory", current_value)
+        legacy = QSettings(str(tmp_path / "old.ini"), QSettings.Format.IniFormat)
+        legacy.setValue("lastOpenDirectory", "legacy")
+
+        with patch("framecover.ui.main_window.QSettings", return_value=legacy):
+            _migrate_legacy_settings(current)
+
+        assert current.value("lastOpenDirectory") == (current_value or "legacy")
 
     def test_apply_button_disabled_initially(self, window: MainWindow) -> None:
         assert not window._apply_btn.isEnabled()
@@ -112,7 +127,7 @@ class TestMainWindowConstruction:
         footer = window._footer
         assert __version__ in footer.version_label.text()
         assert "Fedor Gagarin" in footer.author_label.text()
-        assert "fgagarin.github.io/video-thumbnailer" in footer.link_label.text()
+        assert "fgagarin.github.io/framecover" in footer.link_label.text()
         assert footer.link_label.openExternalLinks()
         assert "latest version" in footer.status_label.text()
         assert footer.isVisible()
@@ -137,7 +152,7 @@ class TestMainWindowVideoLoading:
         assert window.height() > initial_size.height()
 
     def test_unsupported_load_offers_conversion(self, window, deps):
-        from video_thumbnailer.exceptions import UnsupportedFormatError
+        from framecover.exceptions import UnsupportedFormatError
 
         deps[0].load.side_effect = UnsupportedFormatError("clip.m2ts")
         with (
@@ -184,7 +199,7 @@ class TestMainWindowVideoLoading:
         with (
             patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes),
             patch.object(QFileDialog, "getSaveFileName", return_value=(str(tmp_path / "clip.mp4"), "")),
-            patch("video_thumbnailer.ui.main_window.ErrorDialog") as dialog,
+            patch("framecover.ui.main_window.ErrorDialog") as dialog,
             patch.object(window._pool, "start", side_effect=lambda worker: worker.run()),
         ):
             window._offer_conversion(str(tmp_path / "clip.m2ts"))
@@ -297,8 +312,8 @@ class TestMainWindowVideoLoading:
         window._on_video_loaded(_make_vf("C:/videos/clip.mp4"))
 
         with (
-            patch("video_thumbnailer.ui.main_window.sys.platform", "win32"),
-            patch("video_thumbnailer.ui.main_window.subprocess.Popen") as popen,
+            patch("framecover.ui.main_window.sys.platform", "win32"),
+            patch("framecover.ui.main_window.subprocess.Popen") as popen,
         ):
             QTest.mouseClick(
                 window._path_label,
@@ -330,7 +345,7 @@ class TestMainWindowVideoLoading:
         assert label.geometry().right() < blank_point.x()
         assert empty_space.cursor().shape() == Qt.CursorShape.ArrowCursor
 
-        with patch("video_thumbnailer.ui.main_window.subprocess.Popen") as popen:
+        with patch("framecover.ui.main_window.subprocess.Popen") as popen:
             QTest.mouseClick(
                 empty_space,
                 Qt.MouseButton.LeftButton,
@@ -347,8 +362,8 @@ class TestMainWindowVideoLoading:
         assert label.height() >= line_height * 2
 
         with (
-            patch("video_thumbnailer.ui.main_window.sys.platform", "win32"),
-            patch("video_thumbnailer.ui.main_window.subprocess.Popen") as popen,
+            patch("framecover.ui.main_window.sys.platform", "win32"),
+            patch("framecover.ui.main_window.subprocess.Popen") as popen,
         ):
             QTest.mouseClick(
                 label,
@@ -386,7 +401,7 @@ class TestMainWindowVideoLoading:
         self, window: MainWindow
     ) -> None:
         video = _make_vf()
-        with patch("video_thumbnailer.ui.main_window.random.randint", return_value=2500) as randint:
+        with patch("framecover.ui.main_window.random.randint", return_value=2500) as randint:
             window._on_video_loaded(video)
 
         randint.assert_called_once_with(video.duration_ms // 3, video.duration_ms * 2 // 3)
@@ -439,7 +454,7 @@ class TestMainWindowVideoLoading:
         assert not window._preview._current_label.pixmap().isNull()
 
     def test_on_load_error_shows_message(self, window: MainWindow, qtbot) -> None:
-        with patch("video_thumbnailer.ui.main_window.ErrorDialog") as mock_msg:
+        with patch("framecover.ui.main_window.ErrorDialog") as mock_msg:
             window._on_load_error("some error")
         mock_msg.assert_called_once()
         report = mock_msg.call_args.args[0]
@@ -488,7 +503,7 @@ class TestMainWindowFrameExtraction:
         window._frame_extract_target_ms = 2500
         window._set_busy(True)
         details = "[Errno 1094995529] Invalid data found when processing input: 'avcodec_send_packet()'"
-        with patch("video_thumbnailer.ui.main_window.ErrorDialog") as mock_warn:
+        with patch("framecover.ui.main_window.ErrorDialog") as mock_warn:
             window._on_extract_error(details)
         mock_warn.assert_called_once()
         report, parent = mock_warn.call_args.args
@@ -518,7 +533,7 @@ class TestMainWindowFrameExtraction:
         window._timeline.set_position(3000)
         window._frame_extract_active = True
         window._frame_extract_target_ms = 1000
-        with patch("video_thumbnailer.ui.main_window.ErrorDialog") as dialog:
+        with patch("framecover.ui.main_window.ErrorDialog") as dialog:
             window._on_extract_error("decode fail")
         dialog.assert_not_called()
         window._on_scrub.assert_called_with(3000)

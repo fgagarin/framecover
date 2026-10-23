@@ -9,7 +9,7 @@ from PIL import Image
 from PySide6.QtCore import QPoint, QSize
 from PySide6.QtWidgets import QMessageBox
 
-from video_thumbnailer.ui.preview_widget import PreviewWidget
+from framecover.ui.preview_widget import PreviewWidget
 
 
 @pytest.fixture()

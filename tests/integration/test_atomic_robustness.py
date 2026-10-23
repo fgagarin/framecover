@@ -9,9 +9,9 @@ from unittest.mock import patch
 
 import pytest
 
-from video_thumbnailer.core.frame_extractor import PyAVFrameExtractor
-from video_thumbnailer.core.thumbnail_writer import FormatDispatchThumbnailWriter
-from video_thumbnailer.core.video_loader import PyAVVideoLoader
+from framecover.core.frame_extractor import PyAVFrameExtractor
+from framecover.core.thumbnail_writer import FormatDispatchThumbnailWriter
+from framecover.core.video_loader import PyAVVideoLoader
 
 
 @pytest.fixture()
@@ -45,7 +45,7 @@ class TestAtomicRobustness:
         frame = extractor.extract(vf, type("Pos", (), {"offset_ms": 0})())
 
         with patch(
-            "video_thumbnailer.core.atomic_write.os.replace",
+            "framecover.core.atomic_write.os.replace",
             side_effect=OSError("simulated replace failure"),
         ):
             result = writer.write(vf, frame)
@@ -68,7 +68,7 @@ class TestAtomicRobustness:
         frame = extractor.extract(vf, type("Pos", (), {"offset_ms": 0})())
 
         with patch(
-            "video_thumbnailer.core.atomic_write.os.replace",
+            "framecover.core.atomic_write.os.replace",
             side_effect=OSError("simulated replace failure"),
         ):
             writer.write(vf, frame)
@@ -90,7 +90,7 @@ class TestAtomicRobustness:
         frame = extractor.extract(vf, type("Pos", (), {"offset_ms": 0})())
 
         with patch(
-            "video_thumbnailer.core.atomic_write.os.replace",
+            "framecover.core.atomic_write.os.replace",
             side_effect=OSError("simulated replace failure"),
         ):
             writer.write(vf, frame)

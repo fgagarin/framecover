@@ -14,7 +14,7 @@ Templates requiring updates:
 Follow-up TODOs: None — all placeholders resolved
 -->
 
-# Video Thumbnailer Constitution
+# FrameCover Constitution
 
 ## Core Principles
 

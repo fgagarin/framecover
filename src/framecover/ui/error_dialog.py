@@ -23,8 +23,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from video_thumbnailer import __version__
-from video_thumbnailer.models import ApplyError
+from framecover import __version__
+from framecover.models import ApplyError
 
 __all__ = [
     "GITHUB_ISSUES_URL",
@@ -38,7 +38,7 @@ __all__ = [
     "install_exception_handler",
 ]
 
-GITHUB_ISSUES_URL = "https://github.com/fgagarin/video-thumbnailer/issues"
+GITHUB_ISSUES_URL = "https://github.com/fgagarin/framecover/issues"
 _GOOGLE_SEARCH_URL = "https://www.google.com/search"
 # Google rejects very long queries; keep the tail of the trace, where the
 # failing frame and the exception message live.
@@ -242,7 +242,7 @@ def build_google_search_url(report: ErrorReport) -> str:
         stack trace.
     """
     query = (
-        f"I'm using Video Thumbnailer {__version__} on {sys.platform} "
+        f"I'm using FrameCover {__version__} on {sys.platform} "
         "and encountered an error. I don't know how to program. "
         "Explain the likely cause to me in plain language, then give me "
         "safe, numbered steps I can try through the app or system settings. "
@@ -270,7 +270,7 @@ def build_issue_url(report: ErrorReport) -> str:
     """
     body = (
         "### What happened\n\n<!-- Describe what you were doing. -->\n\n"
-        f"### Environment\n\n- Video Thumbnailer {__version__}\n"
+        f"### Environment\n\n- FrameCover {__version__}\n"
         f"- Python {sys.version.split()[0]} on {sys.platform}\n\n"
         "### Stack trace\n\n```\n"
         f"{_tail(report.stack_trace, _MAX_ISSUE_TRACE_CHARS)}\n```\n"

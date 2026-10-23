@@ -15,12 +15,12 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Generator
 
-from video_thumbnailer.models import ApplyError, ApplyResult, VideoFile
+from framecover.models import ApplyError, ApplyResult, VideoFile
 
 if TYPE_CHECKING:
     from PIL import Image
 
-    from video_thumbnailer.core.thumbnail_writer import FormatDispatchThumbnailWriter
+    from framecover.core.thumbnail_writer import FormatDispatchThumbnailWriter
 
 __all__ = ["save_copy"]
 
@@ -48,6 +48,8 @@ def _digest(path: Path) -> str:
 
 
 def _receipt_path(destination: Path) -> Path:
+    # Stable on-disk name from before the FrameCover rename, so copies saved by
+    # earlier versions are still recognised.
     return destination.with_name(f".{destination.name}.video-thumbnailer.json")
 
 

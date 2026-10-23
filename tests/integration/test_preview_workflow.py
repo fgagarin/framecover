@@ -6,10 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from video_thumbnailer.core.frame_extractor import PyAVFrameExtractor
-from video_thumbnailer.core.video_loader import PyAVVideoLoader
-from video_thumbnailer.models import TimelinePosition
-from video_thumbnailer.ui.preview_widget import PreviewWidget
+from framecover.core.frame_extractor import PyAVFrameExtractor
+from framecover.core.video_loader import PyAVVideoLoader
+from framecover.models import TimelinePosition
+from framecover.ui.preview_widget import PreviewWidget
 
 
 @pytest.fixture()

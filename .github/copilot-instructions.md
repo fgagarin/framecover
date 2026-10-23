@@ -1,4 +1,4 @@
-# video-thumbnailer Development Guidelines
+# FrameCover Development Guidelines
 
 Auto-generated from all feature plans. Last updated: 2026-04-10
 
@@ -65,7 +65,7 @@ Layered, dependency-injected design — `app.py::main()` constructs concrete imp
 - **`platform/`** — OS-specific "tell the file manager to refresh its thumbnail cache" implementations behind the `CacheInvalidator` Protocol (`platform/__init__.py`). `get_cache_invalidator()` picks `cache_linux.py` / `cache_macos.py` / `cache_windows.py` by `sys.platform` at runtime. Implementations must never raise; failures are logged as warnings only.
 - **`ui/`** — PySide6 widgets. `main_window.py::MainWindow` receives the loader/extractor/writer/invalidator as constructor args (see `app.py`) and owns the `QThreadPool`. Long-running work (load/extract/apply) is never run on the GUI thread — it's wrapped in a `QRunnable` from `worker.py` (`VideoLoadWorker`, `FrameExtractWorker`, `ApplyWorker`), each exposing `signals.finished`/`signals.error` `Signal`s connected back into `MainWindow` slots. `timeline_widget.py` and `filmstrip_widget.py` handle scrubbing/preview UI; `preview_widget.py` renders the current frame.
 - **`models.py`** — the only shared vocabulary between layers: `VideoFile`, `VideoFormat`, `TimelinePosition`, `ThumbnailFrame`, `ApplyOperation`/`ApplyResult`/`ApplyStatus`/`ApplyError`. Add new cross-layer data shapes here, not in `core/` or `ui/`.
-- **`exceptions.py`** — domain exceptions raised by `core/` (`UnsupportedFormatError`, `NoVideoStreamError`, `ExtractionError`), all deriving from `VideoThumbnailerError`. Prefer these over generic exceptions when a caller needs to distinguish failure kinds; `ApplyResult.error_code` is the equivalent typed-failure mechanism for the write path, which deliberately swallows exceptions instead of raising.
+- **`exceptions.py`** — domain exceptions raised by `core/` (`UnsupportedFormatError`, `NoVideoStreamError`, `ExtractionError`), all deriving from `FrameCoverError`. Prefer these over generic exceptions when a caller needs to distinguish failure kinds; `ApplyResult.error_code` is the equivalent typed-failure mechanism for the write path, which deliberately swallows exceptions instead of raising.
 
 ## Conventions
 

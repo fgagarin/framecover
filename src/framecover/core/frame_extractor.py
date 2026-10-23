@@ -5,8 +5,8 @@ from __future__ import annotations
 import av
 from PIL import Image
 
-from video_thumbnailer.exceptions import ExtractionError
-from video_thumbnailer.models import TimelinePosition, VideoFile
+from framecover.exceptions import ExtractionError
+from framecover.models import TimelinePosition, VideoFile
 
 __all__ = ["PyAVFrameExtractor"]
 

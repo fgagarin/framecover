@@ -20,10 +20,10 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QColor, QMouseEvent, QPainter, QPaintEvent, QPen, QPixmap
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
-from video_thumbnailer.models import TimelinePosition, VideoFile
+from framecover.models import TimelinePosition, VideoFile
 
 if TYPE_CHECKING:
-    from video_thumbnailer.core.frame_extractor import PyAVFrameExtractor
+    from framecover.core.frame_extractor import PyAVFrameExtractor
 
 __all__ = ["FilmstripWidget"]
 

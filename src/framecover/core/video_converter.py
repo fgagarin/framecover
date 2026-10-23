@@ -13,8 +13,8 @@ import av
 import imageio_ffmpeg  # type: ignore[import-untyped]
 from av.error import FFmpegError
 
-from video_thumbnailer.core.thumbnail_writer import FormatDispatchThumbnailWriter
-from video_thumbnailer.exceptions import ConversionError, NoVideoStreamError
+from framecover.core.thumbnail_writer import FormatDispatchThumbnailWriter
+from framecover.exceptions import ConversionError, NoVideoStreamError
 
 __all__ = ["FFmpegVideoConverter"]
 

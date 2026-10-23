@@ -10,11 +10,11 @@ from pathlib import Path
 import av
 import pytest
 
-from video_thumbnailer.core.frame_extractor import PyAVFrameExtractor
-from video_thumbnailer.core.save_copy import save_copy
-from video_thumbnailer.core.thumbnail_writer import FormatDispatchThumbnailWriter
-from video_thumbnailer.core.video_loader import PyAVVideoLoader
-from video_thumbnailer.models import TimelinePosition
+from framecover.core.frame_extractor import PyAVFrameExtractor
+from framecover.core.save_copy import save_copy
+from framecover.core.thumbnail_writer import FormatDispatchThumbnailWriter
+from framecover.core.video_loader import PyAVVideoLoader
+from framecover.models import TimelinePosition
 
 
 @pytest.fixture()

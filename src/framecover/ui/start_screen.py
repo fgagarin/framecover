@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from video_thumbnailer import __version__
+from framecover import __version__
 
 __all__ = [
     "AUTHOR_NAME",
@@ -36,7 +36,7 @@ __all__ = [
 ]
 
 AUTHOR_NAME = "Fedor Gagarin"
-PROJECT_URL = "https://fgagarin.github.io/video-thumbnailer/"
+PROJECT_URL = "https://fgagarin.github.io/framecover/"
 SUPPORTED_FORMATS_TEXT = "MP4, MOV, MKV, AVI, WEBM and other video formats"
 # Placeholder until update checking is implemented.
 UPDATE_STATUS_TEXT = "Test build · you have the latest version"
@@ -338,7 +338,7 @@ class AppFooter(QWidget):
         layout.setContentsMargins(4, 0, 0, 0)
         layout.setSpacing(12)
 
-        self.version_label = QLabel(f"Video Thumbnailer {__version__}")
+        self.version_label = QLabel(f"FrameCover {__version__}")
         self.author_label = QLabel(f"by {AUTHOR_NAME}")
         self.link_label = QLabel(
             f'<a href="{PROJECT_URL}" style="color: #4f5fe6;">Project page</a> ↗'

@@ -8,12 +8,12 @@ import av
 import imageio_ffmpeg
 import pytest
 
-from video_thumbnailer.core.frame_extractor import PyAVFrameExtractor
-from video_thumbnailer.core.thumbnail_writer import FormatDispatchThumbnailWriter
-from video_thumbnailer.core.video_converter import FFmpegVideoConverter
-from video_thumbnailer.core.video_loader import PyAVVideoLoader
-from video_thumbnailer.exceptions import UnsupportedFormatError
-from video_thumbnailer.models import TimelinePosition, VideoFormat
+from framecover.core.frame_extractor import PyAVFrameExtractor
+from framecover.core.thumbnail_writer import FormatDispatchThumbnailWriter
+from framecover.core.video_converter import FFmpegVideoConverter
+from framecover.core.video_loader import PyAVVideoLoader
+from framecover.exceptions import UnsupportedFormatError
+from framecover.models import TimelinePosition, VideoFormat
 
 
 @pytest.mark.parametrize(

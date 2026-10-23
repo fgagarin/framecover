@@ -1,4 +1,4 @@
-"""Shared pytest fixtures for the video-thumbnailer test suite."""
+"""Shared pytest fixtures for the FrameCover test suite."""
 
 from __future__ import annotations
 
