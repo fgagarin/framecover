@@ -37,11 +37,11 @@ def repository(tmp_path, monkeypatch):
     git("remote", "add", "origin", "https://github.com/example/project.git")
     config = (_ROOT / "pyproject.toml").read_text("utf-8").split("[tool.git-changelog]")[1]
     Path("pyproject.toml").write_text(
-        '[project]\nname = "video-thumbnailer"\nversion = "0.1.0"\n'
+        '[project]\nname = "framecover"\nversion = "0.1.0"\n'
         'requires-python = ">=3.13"\n[tool.git-changelog]' + config, encoding="utf-8"
     )
-    Path("src/video_thumbnailer").mkdir(parents=True)
-    Path("src/video_thumbnailer/__init__.py").write_text('__version__ = "0.1.0"\n')
+    Path("src/framecover").mkdir(parents=True)
+    Path("src/framecover/__init__.py").write_text('__version__ = "0.1.0"\n')
     write_lock("0.1.0")
     git("add", ".")
     git("commit", "-m", "feat: initial application")
@@ -66,7 +66,7 @@ def commit(message, filename="change.txt"):
 def write_lock(version):
     Path("uv.lock").write_text(
         'version = 1\nrevision = 3\nrequires-python = ">=3.13"\n'
-        '[[package]]\nname = "video-thumbnailer"\n'
+        '[[package]]\nname = "framecover"\n'
         f'version = "{version}"\nsource = {{ virtual = "." }}\n'
     )
 
@@ -74,7 +74,7 @@ def write_lock(version):
 def test_explicit_release_updates_versions_commit_and_tag(repository):
     release.create_release("v0.2.0", "test-uv")
     assert release._project_version() == "0.2.0"
-    assert '__version__ = "0.2.0"' in Path("src/video_thumbnailer/__init__.py").read_text()
+    assert '__version__ = "0.2.0"' in Path("src/framecover/__init__.py").read_text()
     assert 'version = "0.2.0"' in Path("uv.lock").read_text()
     assert "## [v0.2.0]" in Path("CHANGELOG.md").read_text()
     assert git("status", "--porcelain") == ""
@@ -158,7 +158,7 @@ def test_notes_reject_mismatched_tag_version(repository):
 
 
 @pytest.mark.parametrize("path,expected", [
-    ("src/video_thumbnailer/__init__.py", "package version"),
+    ("src/framecover/__init__.py", "package version"),
     ("uv.lock", "lockfile version"),
 ])
 def test_notes_reject_mismatched_package_or_lock_version(repository, path, expected):
@@ -196,17 +196,17 @@ def test_failed_lock_update_creates_no_commit_or_tag(repository, monkeypatch):
 def test_native_distribution_packaging(repository, platform):
     Path("dist").mkdir()
     if platform == "macos":
-        binary = Path("dist/video-thumbnailer.app/Contents/MacOS/video-thumbnailer")
+        binary = Path("dist/framecover.app/Contents/MacOS/framecover")
         binary.parent.mkdir(parents=True)
     else:
         binary = Path("dist") / (
-            "video-thumbnailer.exe" if platform == "windows" else "video-thumbnailer"
+            "framecover.exe" if platform == "windows" else "framecover"
         )
     binary.write_bytes(b"native executable")
     binary.chmod(0o755)
     release.package_distribution(platform, Path("assets"))
     asset, = Path("assets").iterdir()
-    assert asset.name.startswith(f"video-thumbnailer-0.1.0-{platform}")
+    assert asset.name.startswith(f"framecover-0.1.0-{platform}")
     if platform == "windows":
         assert asset.read_bytes() == binary.read_bytes()
     else:

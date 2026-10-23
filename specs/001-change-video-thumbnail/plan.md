@@ -80,7 +80,7 @@ specs/001-change-video-thumbnail/
 
 ```text
 src/
-└── video_thumbnailer/
+└── framecover/
     ├── __init__.py
     ├── app.py                         # QApplication entry point; main() function
     ├── ui/
@@ -118,7 +118,7 @@ pyproject.toml                         # PEP 621 project metadata + dependencies
 uv.lock                                # Deterministic lock file (uv)
 ```
 
-**Structure Decision**: Single-project layout. All source under `src/video_thumbnailer/`
+**Structure Decision**: Single-project layout. All source under `src/framecover/`
 (src-layout prevents accidental imports from project root). UI, core business logic, and
 platform adapters are separated into distinct subpackages to enforce single-responsibility
 and keep files under the 300-line limit imposed by the constitution.

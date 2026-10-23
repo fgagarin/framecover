@@ -4,18 +4,18 @@ from __future__ import annotations
 
 import pytest
 
-from video_thumbnailer.exceptions import (
+from framecover.exceptions import (
     ExtractionError,
+    FrameCoverError,
     NoVideoStreamError,
     UnsupportedFormatError,
-    VideoThumbnailerError,
 )
 
 
 class TestUnsupportedFormatError:
-    def test_is_video_thumbnailer_error(self) -> None:
+    def test_is_framecover_error(self) -> None:
         exc = UnsupportedFormatError("/path/to/video.rm")
-        assert isinstance(exc, VideoThumbnailerError)
+        assert isinstance(exc, FrameCoverError)
 
     def test_path_attribute(self) -> None:
         exc = UnsupportedFormatError("/path/to/video.rm")
@@ -32,9 +32,9 @@ class TestUnsupportedFormatError:
 
 
 class TestNoVideoStreamError:
-    def test_is_video_thumbnailer_error(self) -> None:
+    def test_is_framecover_error(self) -> None:
         exc = NoVideoStreamError("/path/to/audio.mp3")
-        assert isinstance(exc, VideoThumbnailerError)
+        assert isinstance(exc, FrameCoverError)
 
     def test_path_attribute(self) -> None:
         exc = NoVideoStreamError("/path/to/audio.mp3")
@@ -51,9 +51,9 @@ class TestNoVideoStreamError:
 
 
 class TestExtractionError:
-    def test_is_video_thumbnailer_error(self) -> None:
+    def test_is_framecover_error(self) -> None:
         exc = ExtractionError("/video.mp4", 1000, "codec fail")
-        assert isinstance(exc, VideoThumbnailerError)
+        assert isinstance(exc, FrameCoverError)
 
     def test_attributes(self) -> None:
         exc = ExtractionError("/video.mp4", 2500, "seek error")

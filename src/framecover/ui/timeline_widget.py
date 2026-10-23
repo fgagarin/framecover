@@ -1,4 +1,4 @@
-"""Interactive timeline scrubber widget for video-thumbnailer."""
+"""Interactive timeline scrubber widget for FrameCover."""
 
 from __future__ import annotations
 

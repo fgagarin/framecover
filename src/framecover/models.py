@@ -1,4 +1,4 @@
-"""Domain model types for video-thumbnailer.
+"""Domain model types for FrameCover.
 
 Defines all shared dataclasses and enums used across the core, UI, and platform layers.
 """

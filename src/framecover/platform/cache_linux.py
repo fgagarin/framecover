@@ -18,10 +18,10 @@ from typing import TYPE_CHECKING
 
 from PIL import Image, PngImagePlugin
 
-from video_thumbnailer.core.atomic_write import atomic_replace
+from framecover.core.atomic_write import atomic_replace
 
 if TYPE_CHECKING:
-    from video_thumbnailer.models import VideoFile
+    from framecover.models import VideoFile
 
 logger = logging.getLogger(__name__)
 

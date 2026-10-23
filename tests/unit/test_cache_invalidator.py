@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from video_thumbnailer.models import VideoFile, VideoFormat
+from framecover.models import VideoFile, VideoFormat
 
 
 def _make_video_file(path: Path) -> VideoFile:
@@ -28,7 +28,7 @@ class TestLinuxCacheInvalidator:
     def test_xdg_thumbnail_path_uses_md5_of_uri(self, tmp_path: Path) -> None:
         import hashlib
 
-        from video_thumbnailer.platform.cache_linux import LinuxCacheInvalidator
+        from framecover.platform.cache_linux import LinuxCacheInvalidator
 
         video_path = tmp_path / "test.mp4"
         video_path.write_bytes(b"fake")
@@ -52,7 +52,7 @@ class TestLinuxCacheInvalidator:
     ) -> None:
         from PIL import Image
 
-        from video_thumbnailer.platform.cache_linux import LinuxCacheInvalidator
+        from framecover.platform.cache_linux import LinuxCacheInvalidator
 
         video_path = tmp_path / "test.mp4"
         video_path.write_bytes(b"fake")
@@ -75,7 +75,7 @@ class TestLinuxCacheInvalidator:
 
         with (
             patch(
-                "video_thumbnailer.platform.cache_linux.atomic_replace",
+                "framecover.platform.cache_linux.atomic_replace",
                 side_effect=fake_atomic_replace,
             ),
             patch("subprocess.run"),
@@ -93,7 +93,7 @@ class TestLinuxCacheInvalidator:
     def test_dbus_failure_does_not_raise(self, tmp_path: Path) -> None:
         from unittest.mock import patch
 
-        from video_thumbnailer.platform.cache_linux import LinuxCacheInvalidator
+        from framecover.platform.cache_linux import LinuxCacheInvalidator
 
         video_path = tmp_path / "test.mp4"
         video_path.write_bytes(b"fake")
@@ -111,7 +111,7 @@ class TestMacOSCacheInvalidator:
     def test_subprocess_failure_does_not_raise(self, tmp_path: Path) -> None:
         """MacOS invalidator must swallow all errors."""
         # Import guard — module is always importable
-        from video_thumbnailer.platform.cache_macos import MacOSCacheInvalidator
+        from framecover.platform.cache_macos import MacOSCacheInvalidator
 
         video_path = tmp_path / "test.mp4"
         video_path.write_bytes(b"fake")
@@ -128,7 +128,7 @@ class TestMacOSCacheInvalidator:
 class TestWindowsCacheInvalidator:
     def test_ctypes_failure_does_not_raise(self, tmp_path: Path) -> None:
         """Windows invalidator must swallow all errors."""
-        from video_thumbnailer.platform.cache_windows import WindowsCacheInvalidator
+        from framecover.platform.cache_windows import WindowsCacheInvalidator
 
         video_path = tmp_path / "test.mp4"
         video_path.write_bytes(b"fake")

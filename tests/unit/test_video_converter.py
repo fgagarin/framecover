@@ -9,10 +9,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 from av.error import InvalidDataError
 
-from video_thumbnailer.core.video_converter import FFmpegVideoConverter
-from video_thumbnailer.exceptions import ConversionError, NoVideoStreamError
+from framecover.core.video_converter import FFmpegVideoConverter
+from framecover.exceptions import ConversionError, NoVideoStreamError
 
-MODULE = "video_thumbnailer.core.video_converter"
+MODULE = "framecover.core.video_converter"
 
 
 @pytest.fixture()

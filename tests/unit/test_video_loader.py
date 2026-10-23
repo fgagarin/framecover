@@ -8,9 +8,9 @@ from pathlib import Path
 import pytest
 from mutagen.mp4 import MP4, MP4FreeForm
 
-from video_thumbnailer.core.video_loader import PyAVVideoLoader
-from video_thumbnailer.exceptions import UnsupportedFormatError
-from video_thumbnailer.models import VideoFile, VideoFormat
+from framecover.core.video_loader import PyAVVideoLoader
+from framecover.exceptions import UnsupportedFormatError
+from framecover.models import VideoFile, VideoFormat
 
 
 @pytest.fixture()

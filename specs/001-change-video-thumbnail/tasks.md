@@ -25,9 +25,9 @@ constitution (≥80% branch coverage required).
 **Purpose**: Project scaffolding, dependency manifest, CI, and test fixture generation.
 No application logic. All Phase 2+ work depends on this phase completing first.
 
-- [X] T001 Create full project directory tree: `src/video_thumbnailer/`, `src/video_thumbnailer/ui/`, `src/video_thumbnailer/core/`, `src/video_thumbnailer/platform/`, `tests/unit/`, `tests/integration/`, `tests/benchmarks/`; add empty `__init__.py` in each Python package directory; add `.gitkeep` in test leaf directories
-- [X] T002 Create `pyproject.toml` at repo root — `[project]` requires-python=">=3.13", dependencies: PySide6>=6.8, av>=12.0, Pillow>=10.3; optional-dependencies.dev: pytest>=8, pytest-qt>=4.4, pytest-cov>=5, pytest-benchmark>=4, ruff>=0.4, mypy>=1.10, pyinstaller>=6.0; `[tool.ruff]` select=["E","F","I"], line-length=88; `[tool.mypy]` strict=true, python_version="3.13"; `[tool.pytest.ini_options]` testpaths=["tests"], addopts="--tb=short"; `[tool.coverage.run]` branch=true, source=["video_thumbnailer"]
-- [X] T003 [P] Create `.github/workflows/ci.yml` — four jobs: **lint** (`ruff check src/ tests/`, fails on any output); **typecheck** (`mypy src/`); **test** (`pytest --cov=video_thumbnailer --cov-report=term-missing --cov-fail-under=80`); **benchmark** (`pytest tests/benchmarks/ --benchmark-only --benchmark-max-time=1`); all jobs run on ubuntu-latest, macos-latest, windows-latest; Python 3.13; install deps via `pip install -e ".[dev]"`
+- [X] T001 Create full project directory tree: `src/framecover/`, `src/framecover/ui/`, `src/framecover/core/`, `src/framecover/platform/`, `tests/unit/`, `tests/integration/`, `tests/benchmarks/`; add empty `__init__.py` in each Python package directory; add `.gitkeep` in test leaf directories
+- [X] T002 Create `pyproject.toml` at repo root — `[project]` requires-python=">=3.13", dependencies: PySide6>=6.8, av>=12.0, Pillow>=10.3; optional-dependencies.dev: pytest>=8, pytest-qt>=4.4, pytest-cov>=5, pytest-benchmark>=4, ruff>=0.4, mypy>=1.10, pyinstaller>=6.0; `[tool.ruff]` select=["E","F","I"], line-length=88; `[tool.mypy]` strict=true, python_version="3.13"; `[tool.pytest.ini_options]` testpaths=["tests"], addopts="--tb=short"; `[tool.coverage.run]` branch=true, source=["framecover"]
+- [X] T003 [P] Create `.github/workflows/ci.yml` — four jobs: **lint** (`ruff check src/ tests/`, fails on any output); **typecheck** (`mypy src/`); **test** (`pytest --cov=framecover --cov-report=term-missing --cov-fail-under=80`); **benchmark** (`pytest tests/benchmarks/ --benchmark-only --benchmark-max-time=1`); all jobs run on ubuntu-latest, macos-latest, windows-latest; Python 3.13; install deps via `pip install -e ".[dev]"`
 - [X] T004 [P] Create `tests/generate_fixtures.py` — Python script: use `subprocess.run(["ffmpeg", ...])` to generate six 10-second 320×240 H.264 test videos in `tests/fixtures/`: `sample.mp4`, `sample.mov`, `sample.mkv`, `sample.avi`, `sample.webm`, `sample.flv`; also generate `sample_with_thumb.mp4` (MP4 with an embedded JPEG cover frame) and `sample_with_thumb.mkv` (MKV with attachment cover); script is idempotent (skip if files exist); document `python tests/generate_fixtures.py` in a module-level docstring
 
 **Checkpoint**: Repo structure exists; `uv venv && uv pip sync pyproject.toml --extra dev` installs all deps; `ruff check src/` and `mypy src/` run without file-not-found errors
@@ -41,13 +41,13 @@ depend on. No user story work begins until this phase is complete.
 
 **⚠️ CRITICAL**: Models and exceptions must be stable before any core or UI module is written.
 
-- [X] T005 Create `src/video_thumbnailer/models.py`
-- [X] T006 [P] Create `src/video_thumbnailer/exceptions.py`
-- [X] T007 Create `src/video_thumbnailer/platform/__init__.py`
+- [X] T005 Create `src/framecover/models.py`
+- [X] T006 [P] Create `src/framecover/exceptions.py`
+- [X] T007 Create `src/framecover/platform/__init__.py`
 - [X] T008 [P] Create `tests/conftest.py`
-- [X] T009 Create `src/video_thumbnailer/__init__.py`
+- [X] T009 Create `src/framecover/__init__.py`
 
-**Checkpoint**: `python -m video_thumbnailer` opens a blank Qt window; `mypy src/` and `ruff check src/` report zero errors; `pytest tests/unit/` (no unit tests yet) exits 0
+**Checkpoint**: `python -m framecover` opens a blank Qt window; `mypy src/` and `ruff check src/` report zero errors; `pytest tests/unit/` (no unit tests yet) exits 0
 
 ---
 
@@ -61,17 +61,17 @@ press Apply → thumbnail embedded → file manager refreshed.
 
 ### Implementation for User Story 1
 
-- [X] T010 [P] [US1] Create `src/video_thumbnailer/core/atomic_write.py`
-- [X] T011 [P] [US1] Create `src/video_thumbnailer/core/video_loader.py`
-- [X] T012 [P] [US1] Create `src/video_thumbnailer/core/frame_extractor.py`
-- [X] T013 [US1] Create `src/video_thumbnailer/core/thumbnail_writer.py`
-- [X] T014 [P] [US1] Create `src/video_thumbnailer/platform/cache_linux.py`
-- [X] T015 [P] [US1] Create `src/video_thumbnailer/platform/cache_macos.py`
-- [X] T016 [P] [US1] Create `src/video_thumbnailer/platform/cache_windows.py`
-- [X] T017 [P] [US1] Create `src/video_thumbnailer/ui/timeline_widget.py`
-- [X] T018 [US1] Create `src/video_thumbnailer/ui/worker.py`
-- [X] T019 [US1] Create `src/video_thumbnailer/ui/main_window.py`
-- [X] T020 [US1] Update `src/video_thumbnailer/app.py` to wire real dependencies
+- [X] T010 [P] [US1] Create `src/framecover/core/atomic_write.py`
+- [X] T011 [P] [US1] Create `src/framecover/core/video_loader.py`
+- [X] T012 [P] [US1] Create `src/framecover/core/frame_extractor.py`
+- [X] T013 [US1] Create `src/framecover/core/thumbnail_writer.py`
+- [X] T014 [P] [US1] Create `src/framecover/platform/cache_linux.py`
+- [X] T015 [P] [US1] Create `src/framecover/platform/cache_macos.py`
+- [X] T016 [P] [US1] Create `src/framecover/platform/cache_windows.py`
+- [X] T017 [P] [US1] Create `src/framecover/ui/timeline_widget.py`
+- [X] T018 [US1] Create `src/framecover/ui/worker.py`
+- [X] T019 [US1] Create `src/framecover/ui/main_window.py`
+- [X] T020 [US1] Update `src/framecover/app.py` to wire real dependencies
 
 ### Tests for User Story 1
 
@@ -83,7 +83,7 @@ press Apply → thumbnail embedded → file manager refreshed.
 - [X] T026 [US1] Create `tests/integration/test_mp4_workflow.py` — full pipeline test: copy `sample.mp4` to `tmp_path`; instantiate loader, extractor, writer, linux invalidator; `video = loader.load(path)`; `frame = extractor.extract(video, TimelinePosition(offset_ms=5000))`; `result = writer.write(video, frame.to_image() if hasattr(frame, "to_image") else frame)`; assert `result.success == True`; re-open modified file with `av.open(path)`; iterate streams looking for `stream.type == "video" and stream.disposition.attached_pic`; assert attached_pic stream found; same test for `.mov` copy; assert `elapsed_ms < 3000`
 - [X] T027 [US1] Create `tests/integration/test_atomic_robustness.py` — simulate interrupted write: monkeypatch `os.replace` to raise `OSError("simulated crash")`; call `writer.write(video, thumbnail)`; assert `result.success == False`; assert `pathlib.Path(video.path).read_bytes() == original_bytes` (file content unchanged); assert no `.vt_*.tmp` files exist in video's directory after the call
 
-**Checkpoint**: `pytest tests/unit/ tests/integration/test_mp4_workflow.py tests/integration/test_atomic_robustness.py` all pass; `python -m video_thumbnailer` launches, accepts MP4 drag-drop, shows timeline scrubber and frame preview, applies thumbnail, file manager shows updated icon
+**Checkpoint**: `pytest tests/unit/ tests/integration/test_mp4_workflow.py tests/integration/test_atomic_robustness.py` all pass; `python -m framecover` launches, accepts MP4 drag-drop, shows timeline scrubber and frame preview, applies thumbnail, file manager shows updated icon
 
 ---
 
@@ -98,8 +98,8 @@ placeholder text.
 
 ### Implementation for User Story 2
 
-- [X] T028 [P] [US2] Create `src/video_thumbnailer/ui/preview_widget.py` — implement `PreviewWidget(QWidget)`: layout is `QHBoxLayout` with two `QFrame` panels side by side; left panel labelled "Current Thumbnail" contains a `QLabel` (`current_label`); right panel labelled "Selected Frame" contains a `QLabel` (`candidate_label`); `set_current_thumbnail(image: PIL.Image.Image | None)`: if None show italic grey "No current thumbnail" text; if image, convert PIL→QPixmap via `ImageQt.toqpixmap(image)` and `pixmap.scaled(240, 135, Qt.KeepAspectRatio, Qt.SmoothTransformation)`, set on `current_label`; `set_candidate_frame(image: PIL.Image.Image)`: convert and display on `candidate_label`; `clear()`: reset both panels to placeholder state; `sizeHint()` returns `QSize(540, 165)`; add `__all__ = ["PreviewWidget"]`
-- [X] T029 [US2] Update `src/video_thumbnailer/ui/main_window.py` to integrate `PreviewWidget`: replace the single candidate-frame `QLabel` with a `PreviewWidget` instance; after `VideoLoadWorker` succeeds: call `self._preview.set_current_thumbnail(video.existing_thumbnail)`; after `FrameExtractWorker` succeeds: call `self._preview.set_candidate_frame(pil_image)`; after `ApplyWorker` succeeds: update `video.existing_thumbnail` with the applied frame and call `self._preview.set_current_thumbnail(applied_frame)`; ensure PreviewWidget is visible when a video is loaded and hidden (or placeholder-only) in the no-video state
+- [X] T028 [P] [US2] Create `src/framecover/ui/preview_widget.py` — implement `PreviewWidget(QWidget)`: layout is `QHBoxLayout` with two `QFrame` panels side by side; left panel labelled "Current Thumbnail" contains a `QLabel` (`current_label`); right panel labelled "Selected Frame" contains a `QLabel` (`candidate_label`); `set_current_thumbnail(image: PIL.Image.Image | None)`: if None show italic grey "No current thumbnail" text; if image, convert PIL→QPixmap via `ImageQt.toqpixmap(image)` and `pixmap.scaled(240, 135, Qt.KeepAspectRatio, Qt.SmoothTransformation)`, set on `current_label`; `set_candidate_frame(image: PIL.Image.Image)`: convert and display on `candidate_label`; `clear()`: reset both panels to placeholder state; `sizeHint()` returns `QSize(540, 165)`; add `__all__ = ["PreviewWidget"]`
+- [X] T029 [US2] Update `src/framecover/ui/main_window.py` to integrate `PreviewWidget`: replace the single candidate-frame `QLabel` with a `PreviewWidget` instance; after `VideoLoadWorker` succeeds: call `self._preview.set_current_thumbnail(video.existing_thumbnail)`; after `FrameExtractWorker` succeeds: call `self._preview.set_candidate_frame(pil_image)`; after `ApplyWorker` succeeds: update `video.existing_thumbnail` with the applied frame and call `self._preview.set_current_thumbnail(applied_frame)`; ensure PreviewWidget is visible when a video is loaded and hidden (or placeholder-only) in the no-video state
 
 ### Tests for User Story 2
 
@@ -121,8 +121,8 @@ apply → ApplyResult notes XDG cache used.
 
 ### Implementation for User Story 3
 
-- [X] T032 [P] [US3] Update `src/video_thumbnailer/core/video_loader.py` — extend `VideoFormat` mapping to handle additional `container.format.name` values: "matroska,webm" → MKV or WEBM (distinguish by file extension); "avi" → AVI; "flv" → FLV; extend `existing_thumbnail` extraction: for MKV/WebM, iterate `container.streams` for `stream.type == "data"` or streams with `stream.metadata.get("filename", "").lower() in ("cover.jpg", "cover.png", "folder.jpg")`; read attachment bytes with `av.open` stream packet demux and decode to PIL Image; return None gracefully if no attachment found; verify all 6 VideoFormat members are reachable from container format strings
-- [X] T033 [US3] Update `src/video_thumbnailer/core/thumbnail_writer.py` — extend `FormatDispatchThumbnailWriter.write()` with additional format branches: **MKV/WebM**: save thumbnail to temp JPEG file; call `ffmpeg -y -i {tmp_video} -attach {cover_jpg} -metadata:s:t mimetype=image/jpeg -c copy {tmp_out}` via subprocess; rename tmp_out to original using `os.replace`; wrap entire operation in `atomic_replace`; **AVI**: call `ffmpeg -y -i {tmp_video} -c:v copy -c:a copy {tmp_out}`(best-effort, no cover art); include note in success ApplyResult.error_message "AVI does not support embedded cover art; file manager will generate its own preview"; **FLV**: skip ffmpeg; return `ApplyResult(success=True, error_message="FLV does not support embedded cover art; Linux file manager icon updated via XDG cache")`; all branches still call `invalidator.invalidate()` (called by ApplyWorker, not within writer); all branches handle subprocess CalledProcessError → FFMPEG_ERROR
+- [X] T032 [P] [US3] Update `src/framecover/core/video_loader.py` — extend `VideoFormat` mapping to handle additional `container.format.name` values: "matroska,webm" → MKV or WEBM (distinguish by file extension); "avi" → AVI; "flv" → FLV; extend `existing_thumbnail` extraction: for MKV/WebM, iterate `container.streams` for `stream.type == "data"` or streams with `stream.metadata.get("filename", "").lower() in ("cover.jpg", "cover.png", "folder.jpg")`; read attachment bytes with `av.open` stream packet demux and decode to PIL Image; return None gracefully if no attachment found; verify all 6 VideoFormat members are reachable from container format strings
+- [X] T033 [US3] Update `src/framecover/core/thumbnail_writer.py` — extend `FormatDispatchThumbnailWriter.write()` with additional format branches: **MKV/WebM**: save thumbnail to temp JPEG file; call `ffmpeg -y -i {tmp_video} -attach {cover_jpg} -metadata:s:t mimetype=image/jpeg -c copy {tmp_out}` via subprocess; rename tmp_out to original using `os.replace`; wrap entire operation in `atomic_replace`; **AVI**: call `ffmpeg -y -i {tmp_video} -c:v copy -c:a copy {tmp_out}`(best-effort, no cover art); include note in success ApplyResult.error_message "AVI does not support embedded cover art; file manager will generate its own preview"; **FLV**: skip ffmpeg; return `ApplyResult(success=True, error_message="FLV does not support embedded cover art; Linux file manager icon updated via XDG cache")`; all branches still call `invalidator.invalidate()` (called by ApplyWorker, not within writer); all branches handle subprocess CalledProcessError → FFMPEG_ERROR
 - [X] T034 [P] [US3] Create `tests/unit/test_format_detection.py` — test `PyAVVideoLoader.load()` on each of the six fixture files: assert correct VideoFormat member for each; test UNSUPPORTED returned (not raised) for a file with unrecognised container name; test format detection is based on container format name, not file extension alone (rename sample.mp4 to sample.xyz, verify it still detects as MP4 by reading container header)
 - [X] T035 [US3] Create `tests/integration/test_mkv_workflow.py` — copy `sample.mkv` and `sample.webm` to tmp_path; run full apply pipeline for each; for MKV: re-open output with `av.open()`, find stream where `stream.metadata.get("filename") in ("cover.jpg", "cover.png")`; assert attachment found; check file is playable (duration_ms unchanged); for WebM: same assertion; `elapsed_ms < 5000` for both
 - [X] T036 [US3] Create `tests/integration/test_avi_workflow.py` — copy `sample.avi` and `sample.flv` to tmp_path; run full apply pipeline for AVI: assert `result.success == True`, output file has same duration_ms as input (not corrupted), ApplyResult.error_message mentions "AVI does not support embedded cover art"; run pipeline for FLV: assert `result.success == True`, ApplyResult.error_message mentions "FLV does not support embedded cover art"; both: verify original byte content unchanged if write fails (inject error to verify atomicity)
@@ -136,11 +136,11 @@ apply → ApplyResult notes XDG cache used.
 **Purpose**: Performance gate, distribution packaging, final quality validation.
 
 - [X] T037 [P] Create `tests/benchmarks/test_frame_extraction_perf.py` — use `pytest-benchmark`; benchmark `PyAVFrameExtractor.extract()` on `sample.mp4` (320×240 SD) at 5 s, 1 VP: assert `benchmark.stats["max"] < 0.5`; benchmark on a 1080p MP4 (generate via ffmpeg `-vf scale=1920:1080`): assert max < 0.5; benchmark on a 4K MP4 (`-vf scale=3840:2160`): assert max < 0.5; benchmark label = "frame_extract_SD/1080p/4K"; document reference hardware in module docstring
-- [X] T038 [P] Create `pyinstaller.spec` at repo root — `Analysis()` with `pathex=["."]`, `hiddenimports=["av", "PIL", "PySide6"]`, `datas` collecting PySide6 Qt plugins and av dylibs via `collect_data_files("av")` and `collect_data_files("PySide6")`; `EXE(console=False, name="video-thumbnailer")`; add `Makefile` targets: `make dist-linux`, `make dist-macos`, `make dist-windows` each running `pyinstaller pyinstaller.spec`; document in quickstart.md under "Distribution"
-- [X] T039 Run `pytest --cov=video_thumbnailer --cov-report=term-missing --cov-fail-under=80 tests/unit/ tests/integration/`; identify any uncovered branches; add targeted tests to reach ≥80% branch coverage; pay particular attention to exception handling branches in `video_loader.py`, `thumbnail_writer.py`, and all three cache invalidator files
+- [X] T038 [P] Create `pyinstaller.spec` at repo root — `Analysis()` with `pathex=["."]`, `hiddenimports=["av", "PIL", "PySide6"]`, `datas` collecting PySide6 Qt plugins and av dylibs via `collect_data_files("av")` and `collect_data_files("PySide6")`; `EXE(console=False, name="framecover")`; add `Makefile` targets: `make dist-linux`, `make dist-macos`, `make dist-windows` each running `pyinstaller pyinstaller.spec`; document in quickstart.md under "Distribution"
+- [X] T039 Run `pytest --cov=framecover --cov-report=term-missing --cov-fail-under=80 tests/unit/ tests/integration/`; identify any uncovered branches; add targeted tests to reach ≥80% branch coverage; pay particular attention to exception handling branches in `video_loader.py`, `thumbnail_writer.py`, and all three cache invalidator files
 - [X] T040 Run `ruff check src/ tests/` and `mypy --strict src/`; fix all reported errors; common issues to expect: missing return type annotations, `PIL.Image` type imports requiring `from __future__ import annotations`, ctypes `windll` access guarded with `sys.platform` check; ensure zero errors before marking done
 
-**Final Checkpoint**: `pytest --cov-fail-under=80` passes; `ruff check` and `mypy --strict` report zero errors; CI workflow green on all three OS; `python -m video_thumbnailer` launches and completes the full thumbnail-change workflow for all 6 formats
+**Final Checkpoint**: `pytest --cov-fail-under=80` passes; `ruff check` and `mypy --strict` report zero errors; CI workflow green on all three OS; `python -m framecover` launches and completes the full thumbnail-change workflow for all 6 formats
 
 ---
 

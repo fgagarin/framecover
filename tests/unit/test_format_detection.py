@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from video_thumbnailer.core.video_loader import PyAVVideoLoader, _detect_format
-from video_thumbnailer.models import VideoFormat
+from framecover.core.video_loader import PyAVVideoLoader, _detect_format
+from framecover.models import VideoFormat
 
 # ---------------------------------------------------------------------------
 # _detect_format() unit tests (fast, no file I/O)

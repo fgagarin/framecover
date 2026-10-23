@@ -1,4 +1,4 @@
-"""Main application window for video-thumbnailer."""
+"""Main application window for FrameCover."""
 
 from __future__ import annotations
 
@@ -50,18 +50,22 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from video_thumbnailer import __version__
-from video_thumbnailer.core.video_converter import FFmpegVideoConverter
-from video_thumbnailer.models import (
+from framecover.core.video_converter import FFmpegVideoConverter
+from framecover.models import (
     ApplyError,
     ApplyResult,
     TimelinePosition,
     VideoFile,
 )
-from video_thumbnailer.ui.filmstrip_widget import FilmstripWidget
-from video_thumbnailer.ui.preview_widget import PreviewWidget
-from video_thumbnailer.ui.timeline_widget import TimelineWidget
-from video_thumbnailer.ui.worker import (
+from framecover.ui.error_dialog import (
+    ErrorDialog,
+    build_operation_error_report,
+)
+from framecover.ui.filmstrip_widget import FilmstripWidget
+from framecover.ui.preview_widget import PreviewWidget
+from framecover.ui.start_screen import AppFooter, StartScreen
+from framecover.ui.timeline_widget import TimelineWidget
+from framecover.ui.worker import (
     ApplyWorker,
     FrameExtractWorker,
     VideoConvertWorker,
@@ -69,30 +73,13 @@ from video_thumbnailer.ui.worker import (
 )
 
 if TYPE_CHECKING:
-    from video_thumbnailer.core.frame_extractor import PyAVFrameExtractor
-    from video_thumbnailer.core.thumbnail_writer import FormatDispatchThumbnailWriter
-    from video_thumbnailer.core.video_loader import PyAVVideoLoader
-    from video_thumbnailer.platform import CacheInvalidator
+    from framecover.core.frame_extractor import PyAVFrameExtractor
+    from framecover.core.thumbnail_writer import FormatDispatchThumbnailWriter
+    from framecover.core.video_loader import PyAVVideoLoader
+    from framecover.platform import CacheInvalidator
 
 __all__ = ["MainWindow"]
 
-_DROP_ZONE_MIN_HEIGHT = 200
-_START_SCREEN_TEXT = (
-    "Drop a video file here or click to open\n\n"
-    "1 — Open a video\n"
-    "2 — Choose a frame\n"
-    "3 — Save the preview"
-)
-_START_INFO_TEXT = (
-    f"<b>Test build</b> · Release date not set<br>"
-    f"Version: {__version__} · Author: Fedor Gagarin<br>"
-    'License: <a href="https://github.com/fgagarin/video-thumbnailer/blob/main/LICENSE">'
-    "MIT</a><br>"
-    '<a href="https://fgagarin.github.io/video-thumbnailer/">Project page</a>'
-    " · "
-    f'<a href="https://github.com/fgagarin/video-thumbnailer/blob/main/CHANGELOG.md#unreleased">'
-    f"Changelog {__version__} (Unreleased)</a>"
-)
 _VIDEO_FILE_FILTER = (
     "Video files (*.mp4 *.mov *.m4v *.mkv *.webm *.avi *.flv "
     "*.m2ts *.mts *.ts *.mpeg *.mpg *.wmv *.vob *.mxf *.3gp *.ogv);;All files (*)"
@@ -183,7 +170,8 @@ class MainWindow(QMainWindow):
         self._save_spinner = QTimer(self)
         self._save_spinner.setInterval(80)
         self._save_spinner.timeout.connect(self._advance_save_spinner)
-        self._settings = QSettings("Video Thumbnailer", "Video Thumbnailer")
+        self._settings = QSettings("FrameCover", "FrameCover")
+        _migrate_legacy_settings(self._settings)
         last_open_directory = self._settings.value(
             "lastOpenDirectory", str(Path.home()), type=str
         )
@@ -195,7 +183,7 @@ class MainWindow(QMainWindow):
             else str(Path.home())
         )
 
-        self.setWindowTitle("Video Thumbnailer")
+        self.setWindowTitle("FrameCover")
         self.setMinimumSize(900, 560)
         self.resize(900, 560)
         self.setAcceptDrops(True)
@@ -215,37 +203,10 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
 
-        # Drop zone
-        self._drop_label = _ClickableLabel(_START_SCREEN_TEXT)
-        self._drop_label.setMinimumHeight(_DROP_ZONE_MIN_HEIGHT)
-        self._drop_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._drop_label.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._drop_label.clicked.connect(self._open_file_dialog)
-        self._drop_label.setWordWrap(True)
-        self._drop_label.setTextFormat(Qt.TextFormat.PlainText)
-        self._drop_label.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse
-        )
-        self._drop_label.setStyleSheet(
-            "QLabel {"
-            "  border: 2px dashed #aaaaaa;"
-            "  border-radius: 8px;"
-            "  color: #888888;"
-            "  font-size: 16px;"
-            "}"
-        )
-        layout.addWidget(self._drop_label)
-
-        self._start_info_label = QLabel(_START_INFO_TEXT)
-        self._start_info_label.setTextFormat(Qt.TextFormat.RichText)
-        self._start_info_label.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextBrowserInteraction
-        )
-        self._start_info_label.setOpenExternalLinks(True)
-        self._start_info_label.setWordWrap(True)
-        self._start_info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._start_info_label.setStyleSheet("color: #777777; font-size: 12px;")
-        layout.addWidget(self._start_info_label)
+        self._start_screen = StartScreen()
+        self._drop_zone = self._start_screen.drop_zone
+        self._drop_zone.clicked.connect(self._open_file_dialog)
+        layout.addWidget(self._start_screen, 1)
 
         self._path_container = QWidget()
         path_layout = QHBoxLayout(self._path_container)
@@ -301,6 +262,9 @@ class MainWindow(QMainWindow):
         self._timeline.hide()
         self._timeline.positionChanged.connect(self._on_scrub)
         layout.addWidget(self._timeline)
+
+        self._footer = AppFooter()
+        layout.addWidget(self._footer)
 
     # ------------------------------------------------------------------
     # Drag-and-drop
@@ -359,7 +323,7 @@ class MainWindow(QMainWindow):
         self._settings.setValue("lastOpenDirectory", directory)
         self._settings.sync()
         self._set_busy(True)
-        self._drop_label.setText(f"Loading {path}…")
+        self._drop_zone.set_loading(path)
         worker = VideoLoadWorker(self._loader, path)
         worker.signals.finished.connect(self._on_video_loaded)
         worker.signals.error.connect(self._on_load_error)
@@ -374,7 +338,7 @@ class MainWindow(QMainWindow):
 
     def _offer_conversion(self, path: str) -> None:
         self._set_busy(False)
-        self._drop_label.setText(_START_SCREEN_TEXT)
+        self._drop_zone.reset()
         answer = QMessageBox.question(
             self,
             "Convert to MP4?",
@@ -428,7 +392,7 @@ class MainWindow(QMainWindow):
 
     def _on_conversion_error(self, message: str) -> None:
         self._finish_conversion()
-        QMessageBox.critical(self, "Conversion Error", message)
+        ErrorDialog(build_operation_error_report("convert", message), self).exec()
 
     def _on_video_loaded(self, video: VideoFile) -> None:
         self.resize(1280, 720)
@@ -436,15 +400,10 @@ class MainWindow(QMainWindow):
         self._copy_destination = None
         self._current_frame = None
         self._current_frame_position_ms = None
-        self._drop_label.setText(
-            f"{video.path}\n"
-            f"{video.format.name}  {video.duration_ms // 1000}s  "
-            f"{video.width}×{video.height}"
-        )
         self._timeline.set_duration(video.duration_ms)
         self._timeline.setEnabled(True)
-        self._drop_label.hide()
-        self._start_info_label.hide()
+        self._drop_zone.reset()
+        self._start_screen.hide()
         self._path_label.setText(video.path)
         self._path_container.show()
         self._filmstrip.set_video(video, self._extractor)
@@ -461,9 +420,8 @@ class MainWindow(QMainWindow):
         self._on_scrub(self._timeline.current_position_ms())
 
     def _on_load_error(self, message: str) -> None:
-        self._drop_label.setText(_START_SCREEN_TEXT)
-        self._drop_label.show()
-        self._start_info_label.show()
+        self._drop_zone.reset()
+        self._start_screen.show()
         self._path_container.hide()
         self._preview.hide()
         self._timeline.hide()
@@ -471,7 +429,7 @@ class MainWindow(QMainWindow):
         self._filmstrip.set_video(None)
         self._apply_btn.hide()
         self._set_busy(False)
-        QMessageBox.critical(self, "Load Error", message)
+        ErrorDialog(build_operation_error_report("load", message), self).exec()
 
     # ------------------------------------------------------------------
     # Frame extraction
@@ -544,7 +502,13 @@ class MainWindow(QMainWindow):
             return
 
         self._set_busy(False)
-        QMessageBox.warning(self, "Frame Extraction Error", message)
+        ErrorDialog(
+            build_operation_error_report(
+                "extract", message,
+                position_ms=self._timeline.current_position_ms(),
+            ),
+            self,
+        ).exec()
 
     # ------------------------------------------------------------------
     # Apply thumbnail
@@ -682,11 +646,14 @@ class MainWindow(QMainWindow):
                     self._on_scrub(new_position_ms or 0)
         else:
             self._preview.set_last_save_duration(None)
-            QMessageBox.critical(
+            ErrorDialog(
+                build_operation_error_report(
+                    "save",
+                    result.error_message or "No diagnostic details were provided.",
+                    error_code=result.error_code,
+                ),
                 self,
-                "Apply Failed",
-                result.error_message or "An unknown error occurred.",
-            )
+            ).exec()
 
     def _resolve_copy_conflict(self, message: str | None = None) -> None:
         if self._copy_destination is None:
@@ -725,7 +692,7 @@ class MainWindow(QMainWindow):
         self._set_busy(False)
         self._finish_save_state()
         self._preview.set_last_save_duration(None)
-        QMessageBox.critical(self, "Apply Error", message)
+        ErrorDialog(build_operation_error_report("save", message), self).exec()
 
     # ------------------------------------------------------------------
     # Helpers
@@ -734,7 +701,7 @@ class MainWindow(QMainWindow):
     def _set_busy(self, busy: bool) -> None:
         self._timeline.setEnabled(not busy and self._video is not None)
         self._apply_btn.setEnabled(not busy and self._current_frame is not None)
-        self._drop_label.setAcceptDrops(not busy)
+        self._drop_zone.setAcceptDrops(not busy)
 
     def _start_save_state(self) -> None:
         self._preview.start_save_progress()
@@ -812,6 +779,18 @@ class MainWindow(QMainWindow):
         lower = video.duration_ms // 3
         upper = video.duration_ms * 2 // 3
         return random.randint(lower, max(lower, upper))
+
+def _migrate_legacy_settings(settings: QSettings) -> None:
+    """Copy preferences saved under the pre-FrameCover application name.
+
+    Args:
+        settings: The current FrameCover settings store.
+    """
+    if settings.contains("lastOpenDirectory"):
+        return
+    legacy = QSettings("Video Thumbnailer", "Video Thumbnailer")
+    if legacy.contains("lastOpenDirectory"):
+        settings.setValue("lastOpenDirectory", legacy.value("lastOpenDirectory"))
 
 def _pil_to_pixmap(image: Image.Image) -> QPixmap:
     """Convert a PIL Image to a QPixmap."""

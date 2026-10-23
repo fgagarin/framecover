@@ -6,6 +6,8 @@ from pathlib import Path
 
 from mutagen.mp4 import MP4, MP4FreeForm
 
+# Stable on-disk identifiers from before the FrameCover rename; changing them
+# would make previously saved videos lose their recorded frame position.
 FRAME_NUMBER_TAG = "----:com.apple.iTunes:video-thumbnailer-frame-number"
 POSITION_MS_TAG = "----:com.apple.iTunes:video-thumbnailer-position-ms"
 

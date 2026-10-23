@@ -4,7 +4,7 @@ UV ?= uv
 VERSION ?=
 
 help:
-	@echo "video-thumbnailer build targets"
+	@echo "FrameCover build targets"
 	@echo ""
 	@echo "  sync         Install / sync all dependencies via uv"
 	@echo "  dist-linux   Build a Linux single-file executable  (run on Linux)"
@@ -65,7 +65,7 @@ typecheck:
 	$(UV) run ty check
 
 coverage:
-	$(UV) run pytest --cov=video_thumbnailer \
+	$(UV) run pytest --cov=framecover \
 		--cov-report=term-missing \
 		--cov-fail-under=80 \
 		tests/unit/ tests/integration/
@@ -74,5 +74,5 @@ coverage:
 
 clean:
 	rm -rf build/ dist/ __pycache__ .pytest_cache \
-		src/video_thumbnailer/__pycache__ \
+		src/framecover/__pycache__ \
 		*.egg-info

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from video_thumbnailer.core.atomic_write import atomic_replace
+from framecover.core.atomic_write import atomic_replace
 
 
 class TestAtomicReplace:

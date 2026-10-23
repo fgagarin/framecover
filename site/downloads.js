@@ -5,7 +5,7 @@ async function loadDownloads() {
   const status = document.getElementById("release-status");
   try {
     const response = await fetch(
-      "https://api.github.com/repos/fgagarin/video-thumbnailer/releases/latest",
+      "https://api.github.com/repos/fgagarin/framecover/releases/latest",
       { headers: { Accept: "application/vnd.github+json" }, signal: AbortSignal.timeout(8000) },
     );
     if (response.status === 404) {
@@ -19,14 +19,18 @@ async function loadDownloads() {
     for (const link of document.querySelectorAll("[data-platform]")) {
       const platform = link.dataset.platform;
       const suffix = `-${platform}.${extensions[platform]}`;
+      // Releases published before the FrameCover rename use the old prefix.
       const asset = release.assets.find(
-        (item) => item.name.startsWith("video-thumbnailer-") && item.name.endsWith(suffix),
+        (item) => ["framecover-", "video-thumbnailer-"].some((prefix) => item.name.startsWith(prefix)) &&
+          item.name.endsWith(suffix),
       );
       if (!asset) continue;
       // Keep API data out of HTML and restrict download navigation to this repo.
       const url = new URL(asset.browser_download_url);
       if (url.origin !== "https://github.com" ||
-          !url.pathname.startsWith("/fgagarin/video-thumbnailer/releases/download/")) continue;
+          !["/fgagarin/framecover/", "/fgagarin/video-thumbnailer/"].some(
+            (repo) => url.pathname.startsWith(`${repo}releases/download/`),
+          )) continue;
       link.href = url.href;
       resolved += 1;
     }

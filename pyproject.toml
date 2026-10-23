@@ -1,5 +1,5 @@
 [project]
-name = "video-thumbnailer"
+name = "framecover"
 version = "0.1.0"
 description = "Change the thumbnail icon of a video file displayed by OS file managers"
 license = "MIT"
@@ -25,7 +25,7 @@ dev = [
 ]
 
 [project.scripts]
-video-thumbnailer = "video_thumbnailer.app:main"
+framecover = "framecover.app:main"
 
 [build-system]
 requires = ["setuptools>=84.2.1"]
@@ -55,7 +55,7 @@ addopts = "--tb=short"
 
 [tool.coverage.run]
 branch = true
-source = ["video_thumbnailer"]
+source = ["framecover"]
 
 [tool.git-changelog]
 convention = "conventional"

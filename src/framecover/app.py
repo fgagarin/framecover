@@ -1,4 +1,4 @@
-"""Application entry point for video-thumbnailer."""
+"""Application entry point for FrameCover."""
 
 from __future__ import annotations
 
@@ -17,25 +17,27 @@ def _resource_path(name: str) -> Path:
 def _set_windows_app_user_model_id() -> None:
     if sys.platform == "win32":
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
-            ctypes.c_wchar_p("VideoThumbnailer.Application")
+            ctypes.c_wchar_p("FrameCover.Application")
         )
 
 
 def main() -> None:
-    """Launch the video-thumbnailer GUI application."""
+    """Launch the FrameCover GUI application."""
     from PySide6.QtWidgets import QApplication
 
-    from video_thumbnailer.core.frame_extractor import PyAVFrameExtractor
-    from video_thumbnailer.core.thumbnail_writer import FormatDispatchThumbnailWriter
-    from video_thumbnailer.core.video_converter import FFmpegVideoConverter
-    from video_thumbnailer.core.video_loader import PyAVVideoLoader
-    from video_thumbnailer.platform import get_cache_invalidator
-    from video_thumbnailer.ui.main_window import MainWindow
+    from framecover.core.frame_extractor import PyAVFrameExtractor
+    from framecover.core.thumbnail_writer import FormatDispatchThumbnailWriter
+    from framecover.core.video_converter import FFmpegVideoConverter
+    from framecover.core.video_loader import PyAVVideoLoader
+    from framecover.platform import get_cache_invalidator
+    from framecover.ui.error_dialog import install_exception_handler
+    from framecover.ui.main_window import MainWindow
 
     _set_windows_app_user_model_id()
     app = QApplication(sys.argv)
     icon = QIcon(str(_resource_path("icon.png")))
     app.setWindowIcon(icon)
+    exception_handler = install_exception_handler(app.activeWindow)
 
     loader = PyAVVideoLoader()
     extractor = PyAVFrameExtractor()
@@ -48,7 +50,9 @@ def main() -> None:
     window.setWindowIcon(icon)
     window.show()
 
-    sys.exit(app.exec())
+    exit_code = app.exec()
+    exception_handler.uninstall()
+    sys.exit(exit_code)
 
 
 if __name__ == "__main__":

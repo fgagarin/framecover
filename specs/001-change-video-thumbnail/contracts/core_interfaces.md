@@ -11,12 +11,12 @@ these protocols (verified by mypy in strict mode).
 
 ## VideoLoader
 
-**Module**: `src/video_thumbnailer/core/video_loader.py`
+**Module**: `src/framecover/core/video_loader.py`
 **Responsibility**: Open a video container, validate it, and produce a `VideoFile` entity.
 
 ```python
 from typing import Protocol
-from video_thumbnailer.models import VideoFile
+from framecover.models import VideoFile
 
 class VideoLoader(Protocol):
     def load(self, path: str) -> VideoFile:
@@ -46,13 +46,13 @@ class VideoLoader(Protocol):
 
 ## FrameExtractor
 
-**Module**: `src/video_thumbnailer/core/frame_extractor.py`
+**Module**: `src/framecover/core/frame_extractor.py`
 **Responsibility**: Extract a single video frame at a specified timestamp.
 
 ```python
 from typing import Protocol
 from PIL import Image
-from video_thumbnailer.models import VideoFile, TimelinePosition
+from framecover.models import VideoFile, TimelinePosition
 
 class FrameExtractor(Protocol):
     def extract(self, video: VideoFile, position: TimelinePosition) -> Image.Image:
@@ -79,14 +79,14 @@ class FrameExtractor(Protocol):
 
 ## ThumbnailWriter
 
-**Module**: `src/video_thumbnailer/core/thumbnail_writer.py`
+**Module**: `src/framecover/core/thumbnail_writer.py`
 **Responsibility**: Embed a thumbnail frame into the video file's metadata using an
 atomic write strategy.
 
 ```python
 from typing import Protocol
 from PIL import Image
-from video_thumbnailer.models import VideoFile, ApplyResult
+from framecover.models import VideoFile, ApplyResult
 
 class ThumbnailWriter(Protocol):
     def write(
@@ -127,13 +127,13 @@ class ThumbnailWriter(Protocol):
 
 ## CacheInvalidator
 
-**Module**: `src/video_thumbnailer/platform/`
+**Module**: `src/framecover/platform/`
 **Responsibility**: Notify the host operating system's file manager to refresh the
 thumbnail for a given file path.
 
 ```python
 from typing import Protocol
-from video_thumbnailer.models import VideoFile
+from framecover.models import VideoFile
 
 class CacheInvalidator(Protocol):
     def invalidate(self, video: VideoFile) -> None:

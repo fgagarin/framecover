@@ -10,8 +10,8 @@ from unittest.mock import MagicMock
 import pytest
 from PIL import Image
 
-from video_thumbnailer.core import save_copy as service
-from video_thumbnailer.models import ApplyError, ApplyResult, VideoFile, VideoFormat
+from framecover.core import save_copy as service
+from framecover.models import ApplyError, ApplyResult, VideoFile, VideoFormat
 
 __all__: list[str] = []
 

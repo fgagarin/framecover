@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller spec for video-thumbnailer distribution builds.
+"""PyInstaller spec for FrameCover distribution builds.
 
 Usage:
     pyinstaller pyinstaller.spec
@@ -33,7 +33,7 @@ elif sys.platform == "darwin":
 block_cipher = None
 
 a = Analysis(
-    ["src/video_thumbnailer/__main__.py"],
+    ["src/framecover/__main__.py"],
     pathex=["."],
     binaries=[],
     datas=datas,
@@ -52,10 +52,10 @@ a = Analysis(
         "PySide6.QtCore",
         "PySide6.QtGui",
         "imageio_ffmpeg",
-        "video_thumbnailer",
-        "video_thumbnailer.core",
-        "video_thumbnailer.platform",
-        "video_thumbnailer.ui",
+        "framecover",
+        "framecover.core",
+        "framecover.platform",
+        "framecover.ui",
     ],
     hookspath=[],
     runtime_hooks=[],
@@ -80,7 +80,7 @@ exe = EXE(
     [] if _onedir else a.zipfiles,
     [] if _onedir else a.datas,
     [],
-    name="video-thumbnailer",
+    name="framecover",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -105,22 +105,22 @@ if _onedir:
         strip=False,
         upx=True,
         upx_exclude=[],
-        name="video-thumbnailer",
+        name="framecover",
     )
 
     app = BUNDLE(
         coll,
-        name="video-thumbnailer.app",
+        name="framecover.app",
         icon=app_icon,
-        bundle_identifier="com.video-thumbnailer.app",
+        bundle_identifier="com.framecover.app",
         info_plist={
-            "CFBundleName": "Video Thumbnailer",
-            "CFBundleDisplayName": "Video Thumbnailer",
+            "CFBundleName": "FrameCover",
+            "CFBundleDisplayName": "FrameCover",
             "CFBundleShortVersionString": project_version,
             "CFBundleVersion": project_version,
             "NSHighResolutionCapable": True,
             "LSBackgroundOnly": False,
             "LSUIElement": False,
-            "NSHumanReadableCopyright": "video-thumbnailer",
+            "NSHumanReadableCopyright": "FrameCover",
         },
     )
