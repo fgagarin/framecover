@@ -6,8 +6,15 @@ from unittest.mock import patch
 
 import pytest
 from PIL import Image
-from PySide6.QtCore import QPoint, QSize
-from PySide6.QtWidgets import QMessageBox
+from PySide6.QtCore import QPoint, QSize, Qt, QTimer
+from PySide6.QtTest import QSignalSpy
+from PySide6.QtWidgets import (
+    QMenu,
+    QMessageBox,
+    QStyle,
+    QStyleFactory,
+    QStyleOptionToolButton,
+)
 
 from framecover.ui.preview_widget import PreviewWidget
 
@@ -125,7 +132,7 @@ class TestPreviewWidget:
         thumbnail_layout = preview._thumbnail_column.layout()
         assert button.text() == "Save thumbnail"
         assert "selected frame" in button.toolTip().lower()
-        assert button.width() == 176
+        assert button.width() == 210
         assert button.sizePolicy().horizontalPolicy().name == "Fixed"
         assert "#0078d4" in button.styleSheet()
         button_row = thumbnail_layout.itemAt(thumbnail_layout.count() - 1).layout()
@@ -149,6 +156,37 @@ class TestPreviewWidget:
             and color.blue() > 230
             for color in green_pixels
         )
+
+    @pytest.mark.parametrize("style_name", [None, "Fusion", "Windows"])
+    def test_save_menu_has_wide_click_target(self, preview, qtbot, style_name):
+        button = preview.apply_button
+        if style_name is not None:
+            style = QStyleFactory.create(style_name)
+            if style is None:
+                pytest.skip(f"{style_name} is not available")
+            style.setParent(button)
+            button.setStyle(style)
+        menu = QMenu(button)
+        menu.addAction("Save a copy")
+        menu.addAction("Overwrite original")
+        button.setMenu(menu)
+        option = QStyleOptionToolButton()
+        button.initStyleOption(option)
+        menu_rect = button.style().subControlRect(
+            QStyle.ComplexControl.CC_ToolButton,
+            option,
+            QStyle.SubControl.SC_ToolButtonMenu,
+            button,
+        )
+        assert menu_rect.width() >= 34
+        assert menu_rect.height() >= 32
+        opened = QSignalSpy(menu.aboutToShow)
+        QTimer.singleShot(0, menu.close)
+        qtbot.mouseClick(
+            button, Qt.MouseButton.LeftButton,
+            pos=QPoint(menu_rect.left() + 2, menu_rect.center().y()),
+        )
+        assert opened.count() == 1
 
     def test_clear_resets_both_panels(
         self, preview: PreviewWidget, pil_image: Image.Image

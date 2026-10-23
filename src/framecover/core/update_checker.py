@@ -5,10 +5,13 @@ from __future__ import annotations
 import json
 import logging
 import re
+import ssl
 import urllib.error
 import urllib.request
 from collections.abc import Callable
 from typing import Any, Protocol
+
+import certifi
 
 from framecover.exceptions import UpdateCheckError
 from framecover.models import UpdateInfo, UpdateStatus
@@ -37,6 +40,12 @@ _UNAVAILABLE_MESSAGE = (
 _UNREADABLE_MESSAGE = (
     "FrameCover received an unexpected answer while looking for updates. You can "
     "check the releases page manually."
+)
+_CERTIFICATE_MESSAGE = (
+    "FrameCover couldn't verify GitHub's secure connection. Check your computer's "
+    "date and time. If you use a managed network, ask your administrator about "
+    "HTTPS filtering. You can also check for an official update on the project's "
+    "releases page in your browser."
 )
 
 _log = logging.getLogger(__name__)
@@ -151,7 +160,11 @@ class GitHubUpdateChecker:
             },
         )
         try:
-            with self._opener(request, timeout=self._timeout) as response:
+            context = ssl.create_default_context()
+            context.load_verify_locations(cafile=certifi.where())
+            with self._opener(
+                request, timeout=self._timeout, context=context
+            ) as response:
                 payload = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             if exc.code == 404:
@@ -160,6 +173,9 @@ class GitHubUpdateChecker:
             raise UpdateCheckError(_UNAVAILABLE_MESSAGE) from exc
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             _log.warning("Update check could not reach GitHub: %s", exc)
+            reason = exc.reason if isinstance(exc, urllib.error.URLError) else exc
+            if isinstance(reason, ssl.SSLCertVerificationError):
+                raise UpdateCheckError(_CERTIFICATE_MESSAGE) from exc
             raise UpdateCheckError(_OFFLINE_MESSAGE) from exc
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise UpdateCheckError(_UNREADABLE_MESSAGE) from exc

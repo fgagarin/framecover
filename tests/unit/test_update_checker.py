@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import ssl
 import urllib.error
 from unittest.mock import MagicMock
 
@@ -24,7 +25,10 @@ RELEASE_URL = "https://github.com/fgagarin/framecover/releases/tag/v0.2.0"
 def _opener(payload: object | bytes = None, *, error: Exception | None = None):
     calls = []
 
-    def opener(request, timeout):
+    def opener(request, timeout, *, context):
+        assert context.verify_mode == ssl.CERT_REQUIRED
+        assert context.check_hostname
+        assert context.get_ca_certs()
         calls.append((request, timeout))
         if error is not None:
             raise error
@@ -90,6 +94,20 @@ def test_no_published_release_counts_as_up_to_date():
     assert info == UpdateInfo(UpdateStatus.UP_TO_DATE, "0.1.0", None, RELEASES_URL)
 
 
+def test_bundled_certificates_work_without_system_roots(monkeypatch):
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    assert not context.get_ca_certs()
+    monkeypatch.setattr(ssl, "create_default_context", lambda: context)
+    opener = _opener({"tag_name": "v0.2.0", "html_url": RELEASE_URL})
+
+    info = GitHubUpdateChecker(opener=opener).check("0.1.0")
+
+    assert info.status == UpdateStatus.UPDATE_AVAILABLE
+    assert context.get_ca_certs()
+    assert context.verify_mode == ssl.CERT_REQUIRED
+    assert context.check_hostname
+
+
 def test_foreign_release_links_fall_back_to_releases_page():
     opener = _opener({"tag_name": "v9.0.0", "html_url": "https://evil.example/x"})
 
@@ -103,6 +121,18 @@ def test_foreign_release_links_fall_back_to_releases_page():
     [
         (_opener(error=urllib.error.URLError("offline")), "internet connection"),
         (_opener(error=TimeoutError()), "internet connection"),
+        (
+            _opener(
+                error=urllib.error.URLError(
+                    ssl.SSLCertVerificationError("certificate verify failed")
+                )
+            ),
+            "date and time",
+        ),
+        (
+            _opener(error=ssl.SSLCertVerificationError("certificate verify failed")),
+            "date and time",
+        ),
         (_opener(error=_http_error(403)), "try again"),
         (_opener(error=_http_error(500)), "try again"),
         (_opener(b"not json"), "releases page"),
