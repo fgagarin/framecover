@@ -476,13 +476,13 @@ def test_captured_source_symlink_is_restored_or_retained_safely(
     assert result.error_code is ApplyError.DESTINATION_EXISTS
     assert source.read_bytes() == b"original video contents"
     if not blocked_restore and destination.is_symlink():
-        assert destination.readlink() == source
+        assert destination.readlink().samefile(source)
         assert not list(destination.parent.glob(".*.backup-*"))
     else:
         backups = list(destination.parent.glob(".*.backup-*/*"))
         assert len(backups) == 1
         assert backups[0].is_symlink()
-        assert backups[0].readlink() == source
+        assert backups[0].readlink().samefile(source)
         assert str(backups[0]) in result.error_message
         if blocked_restore:
             assert destination.read_bytes() == b"racing output"
