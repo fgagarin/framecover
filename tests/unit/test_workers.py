@@ -112,7 +112,9 @@ class TestVideoConvertWorker:
         converter.convert.side_effect = RuntimeError("encoder failed")
         finished, errors = _run_worker(VideoConvertWorker(converter, "in.m2ts", "out.mp4"))
         assert finished == []
-        assert errors == ["encoder failed"]
+        assert len(errors) == 1
+        assert "RuntimeError: encoder failed" in errors[0]
+        assert "Traceback (most recent call last):" in errors[0]
 
 
 class TestFrameExtractWorker:
@@ -144,6 +146,30 @@ class TestFrameExtractWorker:
         assert finished == []
         assert len(errors) == 1
         assert "codec fail" in errors[0]
+        assert "Traceback (most recent call last):" in errors[0]
+
+    def test_chained_decode_error_preserves_cause(self) -> None:
+        from video_thumbnailer.exceptions import ExtractionError
+
+        def fail(video, position):
+            try:
+                raise ValueError("Invalid data found when processing input")
+            except ValueError as exc:
+                raise ExtractionError(
+                    video.path, position.offset_ms, "Cannot decode frame"
+                ) from exc
+
+        extractor = MagicMock(spec=PyAVFrameExtractor)
+        extractor.extract.side_effect = fail
+        worker = FrameExtractWorker(
+            extractor, _make_vf(), TimelinePosition(offset_ms=2000)
+        )
+        finished, errors = _run_worker(worker)
+        assert finished == []
+        assert len(errors) == 1
+        assert "ValueError: Invalid data" in errors[0]
+        assert "direct cause" in errors[0]
+        assert "ExtractionError" in errors[0]
 
 
 # ---------------------------------------------------------------------------

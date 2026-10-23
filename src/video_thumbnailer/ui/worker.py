@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 import time
+import traceback
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
@@ -24,6 +26,13 @@ __all__ = [
     "VideoLoadWorker", "VideoConvertWorker", "FrameExtractWorker", "ApplyWorker",
 ]
 
+_log = logging.getLogger(__name__)
+
+
+def _error_details(exc: Exception) -> str:
+    _log.error("Video operation failed", exc_info=exc)
+    return "".join(traceback.format_exception(exc)).rstrip()
+
 
 # ---------------------------------------------------------------------------
 # VideoLoadWorker
@@ -40,7 +49,7 @@ class VideoLoadWorker(QRunnable):
 
     Signals:
         signals.finished(VideoFile): Emitted on success.
-        signals.error(str): Emitted on failure with a human-readable message.
+        signals.error(str): Emitted on failure with full diagnostic details.
     """
 
     def __init__(self, loader: PyAVVideoLoader, path: str) -> None:
@@ -57,7 +66,7 @@ class VideoLoadWorker(QRunnable):
         except UnsupportedFormatError:
             self.signals.unsupported.emit(self._path)
         except Exception as exc:  # noqa: BLE001
-            self.signals.error.emit(str(exc))
+            self.signals.error.emit(_error_details(exc))
 
 
 class _VideoConvertSignals(QObject):
@@ -90,7 +99,7 @@ class VideoConvertWorker(QRunnable):
             )
             self.signals.finished.emit(path)
         except Exception as exc:  # noqa: BLE001
-            self.signals.error.emit(str(exc))
+            self.signals.error.emit(_error_details(exc))
 
 
 # ---------------------------------------------------------------------------
@@ -107,7 +116,7 @@ class FrameExtractWorker(QRunnable):
 
     Signals:
         signals.finished(PIL.Image): Emitted on success.
-        signals.error(str): Emitted on failure with a human-readable message.
+        signals.error(str): Emitted on failure with full diagnostic details.
     """
 
     def __init__(
@@ -128,7 +137,7 @@ class FrameExtractWorker(QRunnable):
             image = self._extractor.extract(self._video, self._position)
             self.signals.finished.emit(image)
         except Exception as exc:  # noqa: BLE001
-            self.signals.error.emit(str(exc))
+            self.signals.error.emit(_error_details(exc))
 
 
 # ---------------------------------------------------------------------------
@@ -203,4 +212,4 @@ class ApplyWorker(QRunnable):
                 )
             self.signals.finished.emit(result)
         except Exception as exc:  # noqa: BLE001
-            self.signals.error.emit(str(exc))
+            self.signals.error.emit(_error_details(exc))

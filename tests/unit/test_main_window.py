@@ -24,6 +24,7 @@ from video_thumbnailer.models import (
     VideoFormat,
 )
 from video_thumbnailer.platform import CacheInvalidator
+from video_thumbnailer.ui.error_dialog import ErrorDialog
 from video_thumbnailer.ui.main_window import MainWindow, _pil_to_pixmap
 
 
@@ -183,11 +184,17 @@ class TestMainWindowVideoLoading:
         with (
             patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes),
             patch.object(QFileDialog, "getSaveFileName", return_value=(str(tmp_path / "clip.mp4"), "")),
-            patch.object(QMessageBox, "critical") as critical,
+            patch("video_thumbnailer.ui.main_window.ErrorDialog") as dialog,
             patch.object(window._pool, "start", side_effect=lambda worker: worker.run()),
         ):
             window._offer_conversion(str(tmp_path / "clip.m2ts"))
-        critical.assert_called_once_with(window, "Conversion Error", "encoding failed")
+        report, parent = dialog.call_args.args
+        assert parent is window
+        assert "Could not convert" in report.title
+        assert "encoding failed" in report.stack_trace
+        assert "Traceback" in report.stack_trace
+        assert "free disk space" in report.description
+        dialog.return_value.exec.assert_called_once()
         assert window._conversion_dialog is None
         assert window._video is video
         assert window._timeline.isEnabled()
@@ -432,9 +439,12 @@ class TestMainWindowVideoLoading:
         assert not window._preview._current_label.pixmap().isNull()
 
     def test_on_load_error_shows_message(self, window: MainWindow, qtbot) -> None:
-        with patch.object(QMessageBox, "critical", return_value=None) as mock_msg:
+        with patch("video_thumbnailer.ui.main_window.ErrorDialog") as mock_msg:
             window._on_load_error("some error")
         mock_msg.assert_called_once()
+        report = mock_msg.call_args.args[0]
+        assert "fully downloaded" in report.description
+        assert report.stack_trace == "some error"
         # Start screen should be restored with the default call to action
         assert "Click to open" in window._drop_zone.title_label.text()
         assert window._start_screen.isVisible()
@@ -472,9 +482,46 @@ class TestMainWindowFrameExtraction:
         # Just verify no exception is raised
 
     def test_on_extract_error_shows_warning(self, window: MainWindow) -> None:
-        with patch.object(QMessageBox, "warning", return_value=None) as mock_warn:
-            window._on_extract_error("decode fail")
+        window._on_video_loaded(_make_vf())
+        window._timeline.set_position(2500)
+        window._frame_extract_active = True
+        window._frame_extract_target_ms = 2500
+        window._set_busy(True)
+        details = "[Errno 1094995529] Invalid data found when processing input: 'avcodec_send_packet()'"
+        with patch("video_thumbnailer.ui.main_window.ErrorDialog") as mock_warn:
+            window._on_extract_error(details)
         mock_warn.assert_called_once()
+        report, parent = mock_warn.call_args.args
+        assert parent is window
+        assert "00:02.500" in report.title
+        assert "choose a different point" in report.description
+        assert "does not prove" in report.description
+        assert details not in report.description
+        assert report.stack_trace == details
+        assert not window._frame_extract_active
+        assert window._frame_extract_target_ms is None
+        assert window._timeline.isEnabled()
+        assert window._video is not None
+        assert not window._apply_btn.isEnabled()
+
+        image = Image.new("RGB", (32, 32))
+        window._timeline.set_position(5000)
+        window._on_frame_extracted(image)
+        assert window._current_frame is image
+        assert window._current_frame_position_ms == 5000
+        assert window._apply_btn.isEnabled()
+
+    def test_stale_extract_error_retries_current_position_without_dialog(
+        self, window: MainWindow
+    ) -> None:
+        window._on_video_loaded(_make_vf())
+        window._timeline.set_position(3000)
+        window._frame_extract_active = True
+        window._frame_extract_target_ms = 1000
+        with patch("video_thumbnailer.ui.main_window.ErrorDialog") as dialog:
+            window._on_extract_error("decode fail")
+        dialog.assert_not_called()
+        window._on_scrub.assert_called_with(3000)
 
     def test_step_selected_frame_moves_timeline(self, window: MainWindow) -> None:
         vf = _make_vf()
@@ -637,7 +684,7 @@ class TestMainWindowApplyThumbnail:
         window._current_frame = Image.new("RGB", (32, 32))
         window._start_save_state()
 
-        with patch.object(QMessageBox, "critical", return_value=None) as mock_error:
+        with patch.object(ErrorDialog, "exec", return_value=0) as mock_error:
             window._on_apply_error("disk write failed")
 
         mock_error.assert_called_once()
@@ -656,14 +703,14 @@ class TestMainWindowApplyThumbnail:
             error_code=ApplyError.FFMPEG_ERROR,
             error_message="ffmpeg failed",
         )
-        with patch.object(QMessageBox, "critical", return_value=None) as mock_err:
+        with patch.object(ErrorDialog, "exec", return_value=0) as mock_err:
             window._on_apply_done(result)
         mock_err.assert_called_once()
         assert window._apply_btn.text() == "Save thumbnail"
         assert window._apply_btn.isEnabled()
 
     def test_on_apply_error_shows_critical(self, window: MainWindow) -> None:
-        with patch.object(QMessageBox, "critical", return_value=None) as mock_crit:
+        with patch.object(ErrorDialog, "exec", return_value=0) as mock_crit:
             window._on_apply_error("catastrophic fail")
         mock_crit.assert_called_once()
 

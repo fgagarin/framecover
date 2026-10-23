@@ -30,12 +30,14 @@ def main() -> None:
     from video_thumbnailer.core.video_converter import FFmpegVideoConverter
     from video_thumbnailer.core.video_loader import PyAVVideoLoader
     from video_thumbnailer.platform import get_cache_invalidator
+    from video_thumbnailer.ui.error_dialog import install_exception_handler
     from video_thumbnailer.ui.main_window import MainWindow
 
     _set_windows_app_user_model_id()
     app = QApplication(sys.argv)
     icon = QIcon(str(_resource_path("icon.png")))
     app.setWindowIcon(icon)
+    exception_handler = install_exception_handler(app.activeWindow)
 
     loader = PyAVVideoLoader()
     extractor = PyAVFrameExtractor()
@@ -48,7 +50,9 @@ def main() -> None:
     window.setWindowIcon(icon)
     window.show()
 
-    sys.exit(app.exec())
+    exit_code = app.exec()
+    exception_handler.uninstall()
+    sys.exit(exit_code)
 
 
 if __name__ == "__main__":

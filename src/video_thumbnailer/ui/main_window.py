@@ -57,6 +57,10 @@ from video_thumbnailer.models import (
     TimelinePosition,
     VideoFile,
 )
+from video_thumbnailer.ui.error_dialog import (
+    ErrorDialog,
+    build_operation_error_report,
+)
 from video_thumbnailer.ui.filmstrip_widget import FilmstripWidget
 from video_thumbnailer.ui.preview_widget import PreviewWidget
 from video_thumbnailer.ui.start_screen import AppFooter, StartScreen
@@ -387,7 +391,7 @@ class MainWindow(QMainWindow):
 
     def _on_conversion_error(self, message: str) -> None:
         self._finish_conversion()
-        QMessageBox.critical(self, "Conversion Error", message)
+        ErrorDialog(build_operation_error_report("convert", message), self).exec()
 
     def _on_video_loaded(self, video: VideoFile) -> None:
         self.resize(1280, 720)
@@ -424,7 +428,7 @@ class MainWindow(QMainWindow):
         self._filmstrip.set_video(None)
         self._apply_btn.hide()
         self._set_busy(False)
-        QMessageBox.critical(self, "Load Error", message)
+        ErrorDialog(build_operation_error_report("load", message), self).exec()
 
     # ------------------------------------------------------------------
     # Frame extraction
@@ -497,7 +501,13 @@ class MainWindow(QMainWindow):
             return
 
         self._set_busy(False)
-        QMessageBox.warning(self, "Frame Extraction Error", message)
+        ErrorDialog(
+            build_operation_error_report(
+                "extract", message,
+                position_ms=self._timeline.current_position_ms(),
+            ),
+            self,
+        ).exec()
 
     # ------------------------------------------------------------------
     # Apply thumbnail
@@ -635,11 +645,14 @@ class MainWindow(QMainWindow):
                     self._on_scrub(new_position_ms or 0)
         else:
             self._preview.set_last_save_duration(None)
-            QMessageBox.critical(
+            ErrorDialog(
+                build_operation_error_report(
+                    "save",
+                    result.error_message or "No diagnostic details were provided.",
+                    error_code=result.error_code,
+                ),
                 self,
-                "Apply Failed",
-                result.error_message or "An unknown error occurred.",
-            )
+            ).exec()
 
     def _resolve_copy_conflict(self, message: str | None = None) -> None:
         if self._copy_destination is None:
@@ -678,7 +691,7 @@ class MainWindow(QMainWindow):
         self._set_busy(False)
         self._finish_save_state()
         self._preview.set_last_save_duration(None)
-        QMessageBox.critical(self, "Apply Error", message)
+        ErrorDialog(build_operation_error_report("save", message), self).exec()
 
     # ------------------------------------------------------------------
     # Helpers
