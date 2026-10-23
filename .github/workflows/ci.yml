@@ -67,7 +67,23 @@ jobs:
           IMAGEIO_FFMPEG_EXE: ffmpeg
       - name: Run tests (macOS/Windows)
         if: runner.os != 'Linux'
-        run: pytest
+        run: pytest --junitxml=test-results.xml
+      - name: Annotate Windows test failures
+        if: failure() && runner.os == 'Windows'
+        shell: python
+        run: |
+          from pathlib import Path
+          from xml.etree import ElementTree
+
+          report = Path("test-results.xml")
+          if report.exists():
+              for case in ElementTree.parse(report).iter("testcase"):
+                  for result in case:
+                      if result.tag not in {"failure", "error"}:
+                          continue
+                      text = f"{case.attrib['name']}: {result.text or result.get('message', '')}"
+                      text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+                      print(f"::error title=Windows pytest failure::{text}")
 
   benchmark:
     name: Benchmark
