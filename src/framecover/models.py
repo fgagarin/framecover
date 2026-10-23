@@ -21,6 +21,8 @@ __all__ = [
     "ApplyError",
     "ApplyResult",
     "ApplyOperation",
+    "UpdateStatus",
+    "UpdateInfo",
 ]
 
 
@@ -166,3 +168,29 @@ class ApplyOperation:
     selected_position: TimelinePosition
     status: ApplyStatus = field(default=ApplyStatus.PENDING)
     result: ApplyResult | None = None
+
+
+class UpdateStatus(Enum):
+    """How the running version compares with the latest published release."""
+
+    UP_TO_DATE = "up_to_date"
+    UPDATE_AVAILABLE = "update_available"
+    NEWER_THAN_RELEASE = "newer_than_release"
+
+
+@dataclass(frozen=True)
+class UpdateInfo:
+    """Result of comparing the running version with the latest release.
+
+    Attributes:
+        status: Comparison outcome.
+        current_version: Version of the running application.
+        latest_version: Latest published version, or ``None`` when no release
+            has been published yet.
+        release_url: Web page where the latest release can be downloaded.
+    """
+
+    status: UpdateStatus
+    current_version: str
+    latest_version: str | None
+    release_url: str

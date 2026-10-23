@@ -27,6 +27,7 @@ def main() -> None:
 
     from framecover.core.frame_extractor import PyAVFrameExtractor
     from framecover.core.thumbnail_writer import FormatDispatchThumbnailWriter
+    from framecover.core.update_checker import GitHubUpdateChecker
     from framecover.core.video_converter import FFmpegVideoConverter
     from framecover.core.video_loader import PyAVVideoLoader
     from framecover.platform import get_cache_invalidator
@@ -45,7 +46,12 @@ def main() -> None:
     invalidator = get_cache_invalidator()
 
     window = MainWindow(
-        loader, extractor, writer, invalidator, converter=FFmpegVideoConverter()
+        loader,
+        extractor,
+        writer,
+        invalidator,
+        converter=FFmpegVideoConverter(),
+        update_checker=GitHubUpdateChecker(),
     )
     window.setWindowIcon(icon)
     window.show()

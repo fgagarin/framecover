@@ -50,11 +50,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from framecover import __version__
 from framecover.core.video_converter import FFmpegVideoConverter
 from framecover.models import (
     ApplyError,
     ApplyResult,
     TimelinePosition,
+    UpdateInfo,
     VideoFile,
 )
 from framecover.ui.error_dialog import (
@@ -68,6 +70,7 @@ from framecover.ui.timeline_widget import TimelineWidget
 from framecover.ui.worker import (
     ApplyWorker,
     FrameExtractWorker,
+    UpdateCheckWorker,
     VideoConvertWorker,
     VideoLoadWorker,
 )
@@ -75,6 +78,7 @@ from framecover.ui.worker import (
 if TYPE_CHECKING:
     from framecover.core.frame_extractor import PyAVFrameExtractor
     from framecover.core.thumbnail_writer import FormatDispatchThumbnailWriter
+    from framecover.core.update_checker import UpdateChecker
     from framecover.core.video_loader import PyAVVideoLoader
     from framecover.platform import CacheInvalidator
 
@@ -147,6 +151,7 @@ class MainWindow(QMainWindow):
         parent: QWidget | None = None,
         *,
         converter: FFmpegVideoConverter | None = None,
+        update_checker: UpdateChecker | None = None,
     ) -> None:
         super().__init__(parent)
         self._loader = loader
@@ -155,6 +160,8 @@ class MainWindow(QMainWindow):
         self._invalidator = invalidator
         self._converter = converter if converter is not None else FFmpegVideoConverter()
         self._conversion_dialog: QProgressDialog | None = None
+        self._update_checker = update_checker
+        self._update_check_active = False
 
         self._video: VideoFile | None = None
         self._current_frame: Image.Image | None = None
@@ -191,6 +198,8 @@ class MainWindow(QMainWindow):
 
         self._build_ui()
         self._install_shortcuts()
+        if self._update_checker is not None:
+            QTimer.singleShot(0, self._check_for_updates)
 
     # ------------------------------------------------------------------
     # UI construction
@@ -264,6 +273,9 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._timeline)
 
         self._footer = AppFooter()
+        self._footer.check_requested.connect(self._check_for_updates)
+        if self._update_checker is None:
+            self._footer.status_indicator.hide()
         layout.addWidget(self._footer)
 
     # ------------------------------------------------------------------
@@ -430,6 +442,28 @@ class MainWindow(QMainWindow):
         self._apply_btn.hide()
         self._set_busy(False)
         ErrorDialog(build_operation_error_report("load", message), self).exec()
+
+    # ------------------------------------------------------------------
+    # Update check
+    # ------------------------------------------------------------------
+
+    def _check_for_updates(self) -> None:
+        if self._update_checker is None or self._update_check_active:
+            return
+        self._update_check_active = True
+        self._footer.set_checking()
+        worker = UpdateCheckWorker(self._update_checker, __version__)
+        worker.signals.finished.connect(self._on_update_checked)
+        worker.signals.error.connect(self._on_update_check_failed)
+        self._pool.start(worker)
+
+    def _on_update_checked(self, info: UpdateInfo) -> None:
+        self._update_check_active = False
+        self._footer.set_update_info(info)
+
+    def _on_update_check_failed(self, message: str) -> None:
+        self._update_check_active = False
+        self._footer.set_check_failed(message)
 
     # ------------------------------------------------------------------
     # Frame extraction

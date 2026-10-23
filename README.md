@@ -127,6 +127,19 @@ incomplete copy, but does not overwrite an existing file. If another application
 changes the destination during a save, recovery backups are retained whenever
 they cannot be restored safely; any recovery paths are included in the error.
 
+### Update checks
+
+On startup FrameCover asks GitHub, in the background, whether a newer release
+has been published, and shows the result in the bottom-right corner of the
+window: a blue dot means you have the latest version, a green dot means an
+update is available. Click the indicator to check again. When a new version
+is available, the indicator shows its number; clicking it opens that version's
+GitHub release page, where you can read the changes and download it.
+The check sends only a
+single anonymous request to the GitHub API; no video information leaves your
+computer. If GitHub cannot be reached, the program keeps working normally and
+the status explains how to retry.
+
 ### Convert other formats to MP4
 
 Opening an unsupported video container (for example M2TS, MTS, or MPEG-TS)

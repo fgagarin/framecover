@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QPointF, QRectF, Qt, Signal
+from PySide6.QtCore import QPointF, QRectF, Qt, QUrl, Signal
 from PySide6.QtGui import (
     QBrush,
     QColor,
+    QDesktopServices,
+    QIcon,
     QMouseEvent,
     QPainter,
     QPainterPath,
@@ -19,17 +21,19 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QMessageBox,
+    QPushButton,
     QVBoxLayout,
     QWidget,
 )
 
 from framecover import __version__
+from framecover.models import UpdateInfo, UpdateStatus
 
 __all__ = [
     "AUTHOR_NAME",
     "PROJECT_URL",
     "SUPPORTED_FORMATS_TEXT",
-    "UPDATE_STATUS_TEXT",
     "AppFooter",
     "DropZone",
     "StartScreen",
@@ -38,8 +42,12 @@ __all__ = [
 AUTHOR_NAME = "Fedor Gagarin"
 PROJECT_URL = "https://fgagarin.github.io/framecover/"
 SUPPORTED_FORMATS_TEXT = "MP4, MOV, MKV, AVI, WEBM and other video formats"
-# Placeholder until update checking is implemented.
-UPDATE_STATUS_TEXT = "Test build · you have the latest version"
+
+_LINK = "#4f5fe6"
+_DOT_LATEST = "#3b82f6"
+_DOT_UPDATE = "#22c55e"
+_DOT_IDLE = "#9ca3af"
+_DOT_ERROR = "#f59e0b"
 
 _ACCENT = QColor("#5b6cf0")
 _ACCENT_DARK = QColor("#4c45d8")
@@ -325,7 +333,14 @@ class StartScreen(QWidget):
 
 
 class AppFooter(QWidget):
-    """Bottom bar with version, author, project link, and update status."""
+    """Bottom bar with version, author, project link, and update status.
+
+    Signals:
+        check_requested(): Emitted when the user clicks the update indicator
+            and no newer release is available.
+    """
+
+    check_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         """Create the footer.
@@ -362,22 +377,93 @@ class AppFooter(QWidget):
             layout.addWidget(widget)
         layout.addStretch(1)
 
-        self.status_frame = QFrame()
-        self.status_frame.setObjectName("updateStatus")
-        self.status_frame.setStyleSheet(
-            "QFrame#updateStatus {"
-            "  background: rgba(128, 128, 128, 22);"
-            "  border-radius: 10px;"
+        self._release_url: str | None = None
+        self.status_indicator = QPushButton()
+        self.status_indicator.setFlat(True)
+        self.status_indicator.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.status_indicator.setStyleSheet(
+            "QPushButton {"
+            "  background: transparent; border: none;"
+            f"  color: {_MUTED}; padding: 2px; font-size: 12px;"
             "}"
+            f"QPushButton:hover {{ color: {_LINK}; text-decoration: underline; }}"
+            f"QPushButton:focus {{ color: {_LINK}; text-decoration: underline; }}"
+            "QPushButton:disabled { color: rgba(128, 128, 128, 140); }"
         )
-        status_layout = QHBoxLayout(self.status_frame)
-        status_layout.setContentsMargins(12, 6, 14, 6)
-        status_layout.setSpacing(8)
-        dot = QLabel()
-        dot.setFixedSize(10, 10)
-        dot.setStyleSheet("background: #22c55e; border-radius: 5px;")
-        status_layout.addWidget(dot)
-        self.status_label = QLabel(UPDATE_STATUS_TEXT)
-        self.status_label.setStyleSheet("font-size: 12px;")
-        status_layout.addWidget(self.status_label)
-        layout.addWidget(self.status_frame)
+        self.status_indicator.clicked.connect(self._activate_status)
+        layout.addWidget(self.status_indicator)
+
+        self._set_status(_DOT_IDLE, "Updates not checked yet")
+
+    def set_checking(self) -> None:
+        """Show that an update check is in progress."""
+        self._set_status(_DOT_IDLE, "Checking for updates…")
+        self.status_indicator.setEnabled(False)
+        self.status_indicator.setToolTip("Checking GitHub for updates. Please wait.")
+
+    def set_update_info(self, info: UpdateInfo) -> None:
+        """Show the result of a successful update check.
+
+        Clicking an available update opens its GitHub release page. Otherwise
+        clicking the indicator runs another check.
+
+        Args:
+            info: Comparison between the running and the latest version.
+        """
+        if info.status is UpdateStatus.UPDATE_AVAILABLE:
+            self._set_status(
+                _DOT_UPDATE,
+                f"Version {info.latest_version} is available",
+                f"You have {info.current_version}. Open the release page on "
+                "GitHub to read what changed and download the new version, "
+                "then install it over the current one.",
+            )
+            self._release_url = info.release_url
+            self.status_indicator.setToolTip(
+                f"You have {info.current_version}. Click to open this release "
+                "on GitHub and download the new version."
+            )
+        elif info.status is UpdateStatus.NEWER_THAN_RELEASE:
+            self._set_status(
+                _DOT_LATEST,
+                "Test build · newer than the latest release",
+                f"Latest published release: {info.latest_version}.",
+            )
+        else:
+            self._set_status(_DOT_LATEST, "You have the latest version")
+
+    def set_check_failed(self, message: str) -> None:
+        """Show that the update check failed and how to retry.
+
+        Args:
+            message: User-facing explanation of the failure and next steps.
+        """
+        self._set_status(_DOT_ERROR, "Couldn't check for updates", message)
+
+    def _set_status(self, color: str, text: str, tooltip: str = "") -> None:
+        self._release_url = None
+        dot = QPixmap(12, 12)
+        dot.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(dot)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(color))
+        painter.drawEllipse(QRectF(1, 1, 10, 10))
+        painter.end()
+        self.status_indicator.setIcon(QIcon(dot))
+        self.status_indicator.setText(text)
+        self.status_indicator.setToolTip(
+            f"{tooltip}\nClick this indicator to check for updates.".strip()
+        )
+        self.status_indicator.setEnabled(True)
+
+    def _activate_status(self) -> None:
+        if self._release_url is None:
+            self.check_requested.emit()
+        elif not QDesktopServices.openUrl(QUrl(self._release_url)):
+            QMessageBox.warning(
+                self,
+                "Couldn't open the release page",
+                "Open this address in your browser to download the new version:\n"
+                f"{self._release_url}",
+            )

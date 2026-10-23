@@ -17,9 +17,12 @@ from framecover import __version__
 from framecover.core.frame_extractor import PyAVFrameExtractor
 from framecover.core.thumbnail_writer import FormatDispatchThumbnailWriter
 from framecover.core.video_loader import PyAVVideoLoader
+from framecover.exceptions import UpdateCheckError
 from framecover.models import (
     ApplyError,
     ApplyResult,
+    UpdateInfo,
+    UpdateStatus,
     VideoFile,
     VideoFormat,
 )
@@ -129,8 +132,8 @@ class TestMainWindowConstruction:
         assert "Fedor Gagarin" in footer.author_label.text()
         assert "fgagarin.github.io/framecover" in footer.link_label.text()
         assert footer.link_label.openExternalLinks()
-        assert "latest version" in footer.status_label.text()
         assert footer.isVisible()
+        assert footer.status_indicator.isHidden()
 
     def test_footer_stays_visible_after_video_load(self, window: MainWindow) -> None:
         window._on_video_loaded(_make_vf())
@@ -141,6 +144,118 @@ class TestMainWindowConstruction:
         qtbot.addWidget(window)
         assert window.width() == 900
         assert window.height() == 560
+
+class TestMainWindowUpdateCheck:
+    def _window(self, qtbot, deps, checker):
+        with patch(
+            "framecover.ui.main_window.QThreadPool.globalInstance"
+        ) as pool:
+            pool.return_value.start.side_effect = lambda worker: worker.run()
+            window = MainWindow(*deps, update_checker=checker)
+            qtbot.addWidget(window)
+            window.show()
+            qtbot.waitUntil(lambda: checker.check.called)
+        return window
+
+    def test_checks_automatically_on_startup(self, qtbot, deps) -> None:
+        checker = MagicMock()
+        checker.check.return_value = UpdateInfo(
+            UpdateStatus.UP_TO_DATE, __version__, __version__, "https://x"
+        )
+        window = self._window(qtbot, deps, checker)
+
+        checker.check.assert_called_once_with(__version__)
+        footer = window._footer
+        assert "latest version" in footer.status_indicator.text()
+        assert footer.status_indicator.isVisible()
+        assert footer.status_indicator.isEnabled()
+        assert footer.status_indicator.isFlat()
+        assert "background: transparent" in footer.status_indicator.styleSheet()
+        assert not footer.status_indicator.icon().isNull()
+
+    def test_indicator_runs_another_check(self, qtbot, deps) -> None:
+        checker = MagicMock()
+        checker.check.return_value = UpdateInfo(
+            UpdateStatus.UP_TO_DATE, "0.1.0", "0.1.0", "https://x"
+        )
+        window = self._window(qtbot, deps, checker)
+        window._pool = MagicMock()
+        window._pool.start.side_effect = lambda worker: worker.run()
+
+        QTest.mouseClick(window._footer.status_indicator, Qt.MouseButton.LeftButton)
+
+        assert checker.check.call_count == 2
+
+    def test_available_update_opens_release_without_rechecking(self, qtbot, deps) -> None:
+        checker = MagicMock()
+        checker.check.return_value = UpdateInfo(
+            UpdateStatus.UPDATE_AVAILABLE,
+            "0.1.0",
+            "0.2.0",
+            "https://github.com/fgagarin/framecover/releases/tag/v0.2.0",
+        )
+        window = self._window(qtbot, deps, checker)
+        window._pool = MagicMock()
+        window._pool.start.side_effect = lambda worker: worker.run()
+
+        with patch(
+            "framecover.ui.start_screen.QDesktopServices.openUrl", return_value=True
+        ) as open_url:
+            QTest.mouseClick(window._footer.status_indicator, Qt.MouseButton.LeftButton)
+
+        assert checker.check.call_count == 1
+        assert window._footer.status_indicator.text() == "Version 0.2.0 is available"
+        assert open_url.call_args.args[0].toString() == (
+            "https://github.com/fgagarin/framecover/releases/tag/v0.2.0"
+        )
+
+    def test_release_browser_failure_offers_manual_address(self, window):
+        url = "https://github.com/fgagarin/framecover/releases/tag/v0.2.0"
+        window._footer.set_update_info(
+            UpdateInfo(UpdateStatus.UPDATE_AVAILABLE, "0.1.0", "0.2.0", url)
+        )
+        with (
+            patch("framecover.ui.start_screen.QDesktopServices.openUrl", return_value=False),
+            patch("framecover.ui.start_screen.QMessageBox.warning") as warning,
+        ):
+            window._footer.status_indicator.click()
+
+        assert url in warning.call_args.args[2]
+
+    def test_failed_check_explains_how_to_retry(self, qtbot, deps) -> None:
+        checker = MagicMock()
+        checker.check.side_effect = UpdateCheckError("Check your internet connection.")
+        window = self._window(qtbot, deps, checker)
+
+        footer = window._footer
+        assert "Couldn't check for updates" in footer.status_indicator.text()
+        assert "internet connection" in footer.status_indicator.toolTip()
+        assert footer.status_indicator.isEnabled()
+        window._pool = MagicMock()
+        window._pool.start.side_effect = lambda worker: worker.run()
+        QTest.mouseClick(footer.status_indicator, Qt.MouseButton.LeftButton)
+        assert checker.check.call_count == 2
+
+    def test_test_build_newer_than_release(self, window, qtbot) -> None:
+        window._footer.set_update_info(
+            UpdateInfo(UpdateStatus.NEWER_THAN_RELEASE, "0.3.0", "0.2.0", "https://x")
+        )
+        assert "Test build" in window._footer.status_indicator.text()
+        assert "0.2.0" in window._footer.status_indicator.toolTip()
+        with qtbot.waitSignal(window._footer.check_requested):
+            window._footer.status_indicator.click()
+
+    def test_ignores_check_while_one_is_running(self, window, deps) -> None:
+        window._update_checker = MagicMock()
+        window._pool = MagicMock()
+
+        window._check_for_updates()
+        window._check_for_updates()
+
+        window._pool.start.assert_called_once()
+        assert not window._footer.status_indicator.isEnabled()
+        assert "Checking" in window._footer.status_indicator.text()
+
 
 class TestMainWindowVideoLoading:
     def test_window_expands_after_video_load(self, window: MainWindow) -> None:

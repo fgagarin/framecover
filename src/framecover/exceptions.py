@@ -8,6 +8,7 @@ __all__ = [
     "NoVideoStreamError",
     "ExtractionError",
     "ConversionError",
+    "UpdateCheckError",
 ]
 
 
@@ -17,6 +18,13 @@ class FrameCoverError(RuntimeError):
 
 class ConversionError(FrameCoverError):
     """Raised when FFmpeg cannot convert a video to MP4."""
+
+
+class UpdateCheckError(FrameCoverError):
+    """Raised when the latest release information cannot be retrieved.
+
+    The message is written for end users and explains what they can do next.
+    """
 
 
 class UnsupportedFormatError(FrameCoverError):

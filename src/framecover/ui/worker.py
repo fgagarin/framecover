@@ -12,18 +12,20 @@ from PIL import Image
 from PySide6.QtCore import QObject, QRunnable, Signal, Slot
 
 from framecover.core.save_copy import save_copy
-from framecover.exceptions import UnsupportedFormatError
+from framecover.exceptions import UnsupportedFormatError, UpdateCheckError
 from framecover.models import TimelinePosition, VideoFile
 
 if TYPE_CHECKING:
     from framecover.core.frame_extractor import PyAVFrameExtractor
     from framecover.core.thumbnail_writer import FormatDispatchThumbnailWriter
+    from framecover.core.update_checker import UpdateChecker
     from framecover.core.video_converter import FFmpegVideoConverter
     from framecover.core.video_loader import PyAVVideoLoader
     from framecover.platform import CacheInvalidator
 
 __all__ = [
     "VideoLoadWorker", "VideoConvertWorker", "FrameExtractWorker", "ApplyWorker",
+    "UpdateCheckWorker",
 ]
 
 _log = logging.getLogger(__name__)
@@ -213,3 +215,40 @@ class ApplyWorker(QRunnable):
             self.signals.finished.emit(result)
         except Exception as exc:  # noqa: BLE001
             self.signals.error.emit(_error_details(exc))
+
+
+# ---------------------------------------------------------------------------
+# UpdateCheckWorker
+# ---------------------------------------------------------------------------
+
+class _UpdateCheckSignals(QObject):
+    finished: Signal = Signal(object)  # UpdateInfo
+    error: Signal = Signal(str)
+
+
+class UpdateCheckWorker(QRunnable):
+    """Look up the latest release in a worker thread.
+
+    Signals:
+        signals.finished(UpdateInfo): Emitted on success.
+        signals.error(str): Emitted on failure with a user-facing explanation.
+    """
+
+    def __init__(self, checker: UpdateChecker, current_version: str) -> None:
+        super().__init__()
+        self._checker = checker
+        self._current_version = current_version
+        self.signals = _UpdateCheckSignals()
+
+    @Slot()
+    def run(self) -> None:
+        try:
+            self.signals.finished.emit(self._checker.check(self._current_version))
+        except UpdateCheckError as exc:
+            self.signals.error.emit(str(exc))
+        except Exception:  # noqa: BLE001
+            _log.exception("Unexpected update check failure")
+            self.signals.error.emit(
+                "Something went wrong while looking for updates. FrameCover "
+                "keeps working normally; click the update indicator to try again."
+            )
