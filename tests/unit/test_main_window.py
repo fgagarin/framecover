@@ -98,24 +98,27 @@ class TestMainWindowConstruction:
         assert not window._apply_btn.isVisible()
 
     def test_drop_zone_visible(self, window: MainWindow) -> None:
-        assert window._drop_label.isVisible()
-        assert "1 — Open a video" in window._drop_label.text()
-        assert "2 — Choose a frame" in window._drop_label.text()
-        assert "3 — Save the preview" in window._drop_label.text()
+        assert window._start_screen.isVisible()
+        assert window._drop_zone.isVisible()
+        assert "Click to open a video file" in window._drop_zone.title_label.text()
+        assert "drag and drop" in window._drop_zone.hint_label.text()
+        steps = [label.text() for label in window._start_screen.step_labels]
+        assert steps == ["1. Open a file", "2. Choose a frame", "3. Save the preview"]
 
-    def test_start_screen_shows_test_build_metadata_and_links(
+    def test_footer_shows_version_author_link_and_update_status(
         self, window: MainWindow
     ) -> None:
-        info = window._start_info_label
-        assert "Test build" in info.text()
-        assert "Release date not set" in info.text()
-        assert __version__ in info.text()
-        assert "Fedor Gagarin" in info.text()
-        assert "LICENSE" in info.text()
-        assert "fgagarin.github.io/video-thumbnailer" in info.text()
-        assert "CHANGELOG.md#unreleased" in info.text()
-        assert info.openExternalLinks()
-        assert info.isVisible()
+        footer = window._footer
+        assert __version__ in footer.version_label.text()
+        assert "Fedor Gagarin" in footer.author_label.text()
+        assert "fgagarin.github.io/video-thumbnailer" in footer.link_label.text()
+        assert footer.link_label.openExternalLinks()
+        assert "latest version" in footer.status_label.text()
+        assert footer.isVisible()
+
+    def test_footer_stays_visible_after_video_load(self, window: MainWindow) -> None:
+        window._on_video_loaded(_make_vf())
+        assert window._footer.isVisible()
 
     def test_default_window_is_compact(self, qtbot, deps) -> None:
         window = MainWindow(*deps)
@@ -143,7 +146,7 @@ class TestMainWindowVideoLoading:
             window._load_video("clip.m2ts")
         question.assert_called_once()
         assert window._conversion_dialog is None
-        assert "1 — Open a video" in window._drop_label.text()
+        assert "Click to open" in window._drop_zone.title_label.text()
 
     def test_conversion_save_cancel_does_not_start_worker(self, window):
         with (
@@ -221,11 +224,11 @@ class TestMainWindowVideoLoading:
         assert window._video is vf
         assert window._timeline.isEnabled()
         assert window._preview.isVisible()
-        assert not window._start_info_label.isVisible()
+        assert not window._start_screen.isVisible()
         assert window._filmstrip.isVisible()
         assert window._timeline.isVisible()
         assert window._apply_btn.isVisible()
-        assert not window._drop_label.isVisible()
+        assert not window._drop_zone.isVisible()
         assert not window._apply_btn.isEnabled()  # no frame yet
 
     def test_on_video_loaded_restores_saved_thumbnail_position(
@@ -263,7 +266,7 @@ class TestMainWindowVideoLoading:
         with patch.object(
             QFileDialog, "getOpenFileName", return_value=("", "")
         ) as get_open_file:
-            QTest.mouseClick(window._drop_label, Qt.MouseButton.LeftButton)
+            QTest.mouseClick(window._drop_zone, Qt.MouseButton.LeftButton)
 
         get_open_file.assert_called_once()
 
@@ -432,21 +435,23 @@ class TestMainWindowVideoLoading:
         with patch.object(QMessageBox, "critical", return_value=None) as mock_msg:
             window._on_load_error("some error")
         mock_msg.assert_called_once()
-        # Drop label should revert to placeholder text
-        assert "Drop" in window._drop_label.text()
-        assert window._start_info_label.isVisible()
+        # Start screen should be restored with the default call to action
+        assert "Click to open" in window._drop_zone.title_label.text()
+        assert window._start_screen.isVisible()
 
-    def test_drop_label_text_after_load(self, window: MainWindow) -> None:
-        vf = _make_vf("/video/test.mp4")
-        window._on_video_loaded(vf)
-        assert "test.mp4" in window._drop_label.text() or "MP4" in window._drop_label.text()
-
-    def test_drop_label_wraps_and_keeps_long_path(self, window: MainWindow) -> None:
+    def test_drop_zone_shows_loading_path(self, window: MainWindow) -> None:
         path = "C:\\videos\\" + "a_long_folder\\" * 12 + "movie.mp4"
-        window._on_video_loaded(_make_vf(path))
+        with patch.object(window._pool, "start"):
+            window._load_video(path)
 
-        assert window._drop_label.wordWrap()
-        assert path in window._drop_label.text()
+        assert "Loading" in window._drop_zone.title_label.text()
+        assert window._drop_zone.hint_label.wordWrap()
+        assert path in window._drop_zone.hint_label.text()
+
+    def test_drop_zone_resets_after_load(self, window: MainWindow) -> None:
+        window._drop_zone.set_loading("/video/test.mp4")
+        window._on_video_loaded(_make_vf("/video/test.mp4"))
+        assert "Click to open" in window._drop_zone.title_label.text()
 
 
 class TestMainWindowFrameExtraction:

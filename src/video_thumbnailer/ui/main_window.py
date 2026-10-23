@@ -50,7 +50,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from video_thumbnailer import __version__
 from video_thumbnailer.core.video_converter import FFmpegVideoConverter
 from video_thumbnailer.models import (
     ApplyError,
@@ -60,6 +59,7 @@ from video_thumbnailer.models import (
 )
 from video_thumbnailer.ui.filmstrip_widget import FilmstripWidget
 from video_thumbnailer.ui.preview_widget import PreviewWidget
+from video_thumbnailer.ui.start_screen import AppFooter, StartScreen
 from video_thumbnailer.ui.timeline_widget import TimelineWidget
 from video_thumbnailer.ui.worker import (
     ApplyWorker,
@@ -76,23 +76,6 @@ if TYPE_CHECKING:
 
 __all__ = ["MainWindow"]
 
-_DROP_ZONE_MIN_HEIGHT = 200
-_START_SCREEN_TEXT = (
-    "Drop a video file here or click to open\n\n"
-    "1 — Open a video\n"
-    "2 — Choose a frame\n"
-    "3 — Save the preview"
-)
-_START_INFO_TEXT = (
-    f"<b>Test build</b> · Release date not set<br>"
-    f"Version: {__version__} · Author: Fedor Gagarin<br>"
-    'License: <a href="https://github.com/fgagarin/video-thumbnailer/blob/main/LICENSE">'
-    "MIT</a><br>"
-    '<a href="https://fgagarin.github.io/video-thumbnailer/">Project page</a>'
-    " · "
-    f'<a href="https://github.com/fgagarin/video-thumbnailer/blob/main/CHANGELOG.md#unreleased">'
-    f"Changelog {__version__} (Unreleased)</a>"
-)
 _VIDEO_FILE_FILTER = (
     "Video files (*.mp4 *.mov *.m4v *.mkv *.webm *.avi *.flv "
     "*.m2ts *.mts *.ts *.mpeg *.mpg *.wmv *.vob *.mxf *.3gp *.ogv);;All files (*)"
@@ -215,37 +198,10 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
 
-        # Drop zone
-        self._drop_label = _ClickableLabel(_START_SCREEN_TEXT)
-        self._drop_label.setMinimumHeight(_DROP_ZONE_MIN_HEIGHT)
-        self._drop_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._drop_label.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._drop_label.clicked.connect(self._open_file_dialog)
-        self._drop_label.setWordWrap(True)
-        self._drop_label.setTextFormat(Qt.TextFormat.PlainText)
-        self._drop_label.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse
-        )
-        self._drop_label.setStyleSheet(
-            "QLabel {"
-            "  border: 2px dashed #aaaaaa;"
-            "  border-radius: 8px;"
-            "  color: #888888;"
-            "  font-size: 16px;"
-            "}"
-        )
-        layout.addWidget(self._drop_label)
-
-        self._start_info_label = QLabel(_START_INFO_TEXT)
-        self._start_info_label.setTextFormat(Qt.TextFormat.RichText)
-        self._start_info_label.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextBrowserInteraction
-        )
-        self._start_info_label.setOpenExternalLinks(True)
-        self._start_info_label.setWordWrap(True)
-        self._start_info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._start_info_label.setStyleSheet("color: #777777; font-size: 12px;")
-        layout.addWidget(self._start_info_label)
+        self._start_screen = StartScreen()
+        self._drop_zone = self._start_screen.drop_zone
+        self._drop_zone.clicked.connect(self._open_file_dialog)
+        layout.addWidget(self._start_screen, 1)
 
         self._path_container = QWidget()
         path_layout = QHBoxLayout(self._path_container)
@@ -301,6 +257,9 @@ class MainWindow(QMainWindow):
         self._timeline.hide()
         self._timeline.positionChanged.connect(self._on_scrub)
         layout.addWidget(self._timeline)
+
+        self._footer = AppFooter()
+        layout.addWidget(self._footer)
 
     # ------------------------------------------------------------------
     # Drag-and-drop
@@ -359,7 +318,7 @@ class MainWindow(QMainWindow):
         self._settings.setValue("lastOpenDirectory", directory)
         self._settings.sync()
         self._set_busy(True)
-        self._drop_label.setText(f"Loading {path}…")
+        self._drop_zone.set_loading(path)
         worker = VideoLoadWorker(self._loader, path)
         worker.signals.finished.connect(self._on_video_loaded)
         worker.signals.error.connect(self._on_load_error)
@@ -374,7 +333,7 @@ class MainWindow(QMainWindow):
 
     def _offer_conversion(self, path: str) -> None:
         self._set_busy(False)
-        self._drop_label.setText(_START_SCREEN_TEXT)
+        self._drop_zone.reset()
         answer = QMessageBox.question(
             self,
             "Convert to MP4?",
@@ -436,15 +395,10 @@ class MainWindow(QMainWindow):
         self._copy_destination = None
         self._current_frame = None
         self._current_frame_position_ms = None
-        self._drop_label.setText(
-            f"{video.path}\n"
-            f"{video.format.name}  {video.duration_ms // 1000}s  "
-            f"{video.width}×{video.height}"
-        )
         self._timeline.set_duration(video.duration_ms)
         self._timeline.setEnabled(True)
-        self._drop_label.hide()
-        self._start_info_label.hide()
+        self._drop_zone.reset()
+        self._start_screen.hide()
         self._path_label.setText(video.path)
         self._path_container.show()
         self._filmstrip.set_video(video, self._extractor)
@@ -461,9 +415,8 @@ class MainWindow(QMainWindow):
         self._on_scrub(self._timeline.current_position_ms())
 
     def _on_load_error(self, message: str) -> None:
-        self._drop_label.setText(_START_SCREEN_TEXT)
-        self._drop_label.show()
-        self._start_info_label.show()
+        self._drop_zone.reset()
+        self._start_screen.show()
         self._path_container.hide()
         self._preview.hide()
         self._timeline.hide()
@@ -734,7 +687,7 @@ class MainWindow(QMainWindow):
     def _set_busy(self, busy: bool) -> None:
         self._timeline.setEnabled(not busy and self._video is not None)
         self._apply_btn.setEnabled(not busy and self._current_frame is not None)
-        self._drop_label.setAcceptDrops(not busy)
+        self._drop_zone.setAcceptDrops(not busy)
 
     def _start_save_state(self) -> None:
         self._preview.start_save_progress()
