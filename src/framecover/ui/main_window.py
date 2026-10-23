@@ -223,6 +223,8 @@ class MainWindow(QMainWindow):
         path_layout.setSpacing(8)
 
         self._open_video_btn = QToolButton()
+        self._open_video_btn.setAutoRaise(True)
+        self._open_video_btn.setStyleSheet("QToolButton { border: none; }")
         self._open_video_btn.setIcon(
             self.style().standardIcon(QStyle.StandardPixmap.SP_DialogOpenButton)
         )

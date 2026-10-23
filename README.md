@@ -140,6 +140,19 @@ single anonymous request to the GitHub API; no video information leaves your
 computer. If GitHub cannot be reached, the program keeps working normally and
 the status explains how to retry.
 
+Packaged builds include a trusted CA certificate bundle for HTTPS update checks,
+including on macOS without a separate Python installation. Certificate and
+hostname verification remain enabled. A certificate error is reported separately
+from a connection failure; check the computer's date and time or consult your
+network administrator if HTTPS filtering is in use.
+
+The macOS app is currently not Developer ID signed or notarized, so macOS may
+require explicit approval in **System Settings > Privacy & Security** on first
+launch. Only approve a download you trust from the official project releases.
+This launch approval is separate from HTTPS certificate verification; it does
+not repair update checks. You can check the project's releases page in your
+browser if the in-app check fails.
+
 ### Convert other formats to MP4
 
 Opening an unsupported video container (for example M2TS, MTS, or MPEG-TS)

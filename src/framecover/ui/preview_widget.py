@@ -100,17 +100,22 @@ class PreviewWidget(QWidget):
         )
         self.apply_button.setAccessibleName("Save thumbnail")
         self.apply_button.setMinimumHeight(34)
-        self.apply_button.setFixedWidth(176)
+        self.apply_button.setFixedWidth(210)
         self.apply_button.setSizePolicy(
             QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed
         )
         self.apply_button.setStyleSheet(
             "QToolButton { background: #0078d4; color: white; "
             "border: 1px solid #005a9e; "
-            "border-radius: 6px; }"
+            "border-radius: 6px; padding-right: 34px; }"
             "QToolButton:hover { background: #006cbe; }"
             "QToolButton:pressed { background: #005a9e; }"
             "QToolButton:disabled { background: #8ab9dc; border-color: #8ab9dc; }"
+            "QToolButton::menu-button { width: 34px; "
+            "border-left: 1px solid #005a9e; "
+            "border-top-right-radius: 6px; border-bottom-right-radius: 6px; }"
+            "QToolButton::menu-button:hover { background: #006cbe; }"
+            "QToolButton::menu-button:pressed { background: #005a9e; }"
         )
         self._save_duration_label = QLabel()
         self._save_duration_label.setStyleSheet("color: #666666; font-size: 12px;")

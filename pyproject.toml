@@ -5,6 +5,7 @@ description = "Change the thumbnail icon of a video file displayed by OS file ma
 license = "MIT"
 requires-python = ">=3.13"
 dependencies = [
+    "certifi>=2026.2.25",
     "PySide6-Essentials>=6.12.0",
     "av>=19.0.2",
     "Pillow>=13.0.0",

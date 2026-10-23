@@ -386,6 +386,8 @@ class TestMainWindowVideoLoading:
     def test_open_video_button_opens_file_dialog(
         self, window: MainWindow, tmp_path
     ) -> None:
+        assert window._open_video_btn.autoRaise()
+        assert "border: none" in window._open_video_btn.styleSheet()
         window._last_open_directory = str(tmp_path)
 
         with (

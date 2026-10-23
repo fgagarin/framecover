@@ -22,6 +22,7 @@ with Path("pyproject.toml").open("rb") as project_file:
 # Collecting all PySide6 data also pulls in unused WebEngine and QML resources.
 datas = []
 datas += collect_data_files("av")
+datas += collect_data_files("certifi")
 datas += [("icon.png", ".")]
 
 app_icon = None
