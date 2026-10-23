@@ -685,7 +685,7 @@ class TestMainWindowApplyThumbnail:
             window._on_apply_clicked()
         question.assert_not_called()
         start.assert_called_once()
-        assert start.call_args.args[0]._destination == "/fake/video-thumbnail.mp4"
+        assert start.call_args.args[0]._destination == str(Path("/fake/video-thumbnail.mp4"))
 
     def test_set_busy_disables_controls(self, window: MainWindow) -> None:
         vf = _make_vf()
@@ -731,7 +731,7 @@ class TestCopySaveChoices:
             window._on_overwrite_clicked()
             window._load_video("other.mp4")
         start.assert_called_once()
-        assert start.call_args.args[0]._destination == "/fake/video-thumbnail.mp4"
+        assert start.call_args.args[0]._destination == str(Path("/fake/video-thumbnail.mp4"))
         assert not start.call_args.args[0]._overwrite
         assert window._video.path == "/fake/video.mp4"
 
@@ -745,7 +745,7 @@ class TestCopySaveChoices:
         else:
             start.assert_called_once()
             assert start.call_args.args[0]._destination == (
-                "/fake/video-thumbnail.mp4" if choice == "Save a copy" else None
+                str(Path("/fake/video-thumbnail.mp4")) if choice == "Save a copy" else None
             )
 
     def test_warning_defaults_to_copy_and_explains_risk(self, window, monkeypatch):
@@ -796,8 +796,8 @@ class TestCopySaveChoices:
         else:
             worker = start.call_args.args[0]
             assert worker._destination == (
-                "/fake/video-thumbnail-thumbnail.mp4"
-                if choice == "Add another suffix" else "/fake/video-thumbnail.mp4"
+                str(Path("/fake/video-thumbnail-thumbnail.mp4"))
+                if choice == "Add another suffix" else str(Path("/fake/video-thumbnail.mp4"))
             )
             assert worker._overwrite == (choice == "Overwrite")
 
