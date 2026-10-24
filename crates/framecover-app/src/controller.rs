@@ -448,8 +448,6 @@ pub enum Event {
         ratio: f64,
         released: bool,
     },
-    /// The scrub debounce timer fired.
-    ScrubSettled,
     StepFrame(i32),
     FilmstripSelected(u64),
     FrameExtracted {
@@ -514,8 +512,6 @@ pub enum Effect {
     },
     SetFilmstripVideo(Option<Arc<VideoFile>>),
     SelectFilmstripPosition(u64),
-    RestartScrubDebounce,
-    CancelScrubDebounce,
     Save(SaveJob),
     PickConvertDestination {
         source: PathBuf,
@@ -590,7 +586,6 @@ impl Controller {
             Event::LoadUnsupported { token, path } => self.offer_conversion(token, path),
             Event::LoadFailed { token, details } => self.on_load_error(token, &details),
             Event::TimelinePointer { ratio, released } => self.on_timeline_pointer(ratio, released),
-            Event::ScrubSettled => self.on_scrub(self.state.timeline.position_ms()),
             Event::StepFrame(direction) => self.step_selected_frame(direction),
             Event::FilmstripSelected(ms) => self.on_filmstrip_position_selected(ms),
             Event::FrameExtracted { generation, image } => {
@@ -891,7 +886,7 @@ longer and change its video codec.\n\nReason: {reason}"
 
     // -- frame selection ----------------------------------------------------
 
-    fn on_timeline_pointer(&mut self, ratio: f64, released: bool) {
+    fn on_timeline_pointer(&mut self, ratio: f64, _released: bool) {
         if !self.state.timeline_enabled() {
             return;
         }
@@ -899,12 +894,9 @@ longer and change its video codec.\n\nReason: {reason}"
             return;
         };
         self.state.timeline.set_position(position);
-        if released {
-            self.fx.push(Effect::CancelScrubDebounce);
-            self.on_scrub(position);
-        } else {
-            self.fx.push(Effect::RestartScrubDebounce);
-        }
+        // Follow the pointer while dragging: requests coalesce in `on_scrub`,
+        // so the frame updates as fast as frames can be decoded.
+        self.on_scrub(position);
     }
 
     fn on_scrub(&mut self, offset_ms: u64) {
@@ -935,6 +927,12 @@ longer and change its video codec.\n\nReason: {reason}"
         if s.saving || !s.dialogs.is_empty() {
             return;
         }
+        // While a frame is being decoded, let a held key queue at most one
+        // further step: the display then advances frame by frame and the
+        // frame shown when the key is released is (almost) the one selected.
+        if s.frame_extract_active && s.frame_extract_target_ms != Some(s.timeline.position_ms()) {
+            return;
+        }
         if let Some(next) = step_position(video, s.timeline.position_ms(), direction) {
             s.timeline.set_position(next);
             self.on_scrub(next);
@@ -949,35 +947,47 @@ longer and change its video codec.\n\nReason: {reason}"
         self.on_scrub(self.state.timeline.position_ms());
     }
 
-    /// Consume the running request; `true` if the result is stale (another
-    /// video, or the timeline moved meanwhile) and the
-    /// latest position was re-requested instead.
-    fn retry_if_stale(&mut self, generation: u64) -> bool {
+    /// Consume the running request; `true` if the result is for another
+    /// video (it is dropped and the current position requested instead).
+    fn retry_if_other_video(&mut self, generation: u64) -> bool {
         self.state.frame_extract_active = false;
-        let requested = self.state.frame_extract_target_ms.take();
-        let current = self.state.timeline.position_ms();
-        if generation != self.state.video_generation || requested.is_some_and(|r| r != current) {
-            self.on_scrub(current);
+        if generation != self.state.video_generation {
+            self.state.frame_extract_target_ms = None;
+            self.on_scrub(self.state.timeline.position_ms());
             return true;
         }
         false
     }
 
     fn on_frame_extracted(&mut self, generation: u64, image: RgbImage) {
-        if self.retry_if_stale(generation) {
+        if self.retry_if_other_video(generation) {
             return;
         }
         let s = &mut self.state;
-        let position = s.timeline.position_ms();
+        let current = s.timeline.position_ms();
+        // Show the decoded frame at the position it was requested for, even if
+        // the timeline has moved on meanwhile: that is what makes dragging and
+        // held arrow keys animate. Then catch up with the latest position.
+        let position = s.frame_extract_target_ms.take().unwrap_or(current);
         let image = Arc::new(image);
         s.current_frame = Some(Arc::clone(&image));
         s.current_frame_position_ms = Some(position);
         s.candidate = Some((image, position));
         s.busy = false;
+        if position != current {
+            self.on_scrub(current);
+        }
     }
 
     fn on_extract_error(&mut self, generation: u64, details: &str) {
-        if self.retry_if_stale(generation) {
+        let requested = self.state.frame_extract_target_ms.take();
+        if self.retry_if_other_video(generation) {
+            return;
+        }
+        let current = self.state.timeline.position_ms();
+        if requested.is_some_and(|r| r != current) {
+            // The failed position was already left behind; try the new one.
+            self.on_scrub(current);
             return;
         }
         self.state.busy = false;
@@ -1405,7 +1415,13 @@ mod tests {
     #[test]
     fn scrub_without_video_does_nothing() {
         let mut h = Harness::new();
-        assert!(h.send(Event::ScrubSettled).is_empty());
+        assert!(
+            h.send(Event::TimelinePointer {
+                ratio: 0.5,
+                released: false
+            })
+            .is_empty()
+        );
         assert!(h.send(Event::StepFrame(1)).is_empty());
     }
 
@@ -1444,8 +1460,19 @@ mod tests {
             generation,
             image: RgbImage::new(1, 1),
         });
+        // The late frame is shown at the position it was decoded for, and the
+        // latest position is requested next.
+        assert_eq!(h.s().current_frame_position_ms, Some(3000));
+        assert_eq!(
+            h.s().frame_title(),
+            format!("Frame ({})", format_position(3000))
+        );
         assert_eq!(h.extracts(), [2000]);
-        assert!(h.s().current_frame.is_none());
+        assert!(!h.s().save_enabled(), "saving waits for the latest frame");
+        h.complete_extract();
+        assert_eq!(h.s().current_frame_position_ms, Some(2000));
+        assert!(h.extracts().is_empty());
+        assert!(h.s().save_enabled());
     }
 
     #[test]
@@ -1474,15 +1501,25 @@ mod tests {
         h.send(Event::StepFrame(1));
         assert_eq!(h.s().timeline.position_ms(), 1040);
         assert_eq!(h.extracts(), [1040]);
-        // Repeated steps move while busy; extraction requests coalesce.
+        // A held key queues at most one step while a frame is decoding, so
+        // every frame is shown in turn.
         for _ in 0..4 {
             h.send(Event::StepFrame(1));
         }
-        assert_eq!(h.s().timeline.position_ms(), 1200);
+        assert_eq!(h.s().timeline.position_ms(), 1080);
         assert_eq!(h.s().frame_extract_target_ms, Some(1040));
         assert!(h.extracts().is_empty());
         h.complete_extract();
-        assert_eq!(h.extracts(), [1200], "latest position is re-requested");
+        assert_eq!(h.s().current_frame_position_ms, Some(1040));
+        assert_eq!(h.extracts(), [1080], "the queued step is requested next");
+        h.send(Event::StepFrame(1));
+        assert_eq!(h.s().timeline.position_ms(), 1120);
+        h.complete_extract();
+        assert_eq!(h.s().current_frame_position_ms, Some(1080));
+        assert_eq!(h.extracts(), [1120]);
+        h.complete_extract();
+        assert_eq!(h.s().current_frame_position_ms, Some(1120));
+        assert!(h.extracts().is_empty());
 
         let v = video(5000);
         assert_eq!(step_position(&v, 0, -1), None);
@@ -1492,30 +1529,37 @@ mod tests {
     }
 
     #[test]
-    fn timeline_drag_debounces_and_release_extracts() {
+    fn timeline_drag_updates_frame_continuously() {
         let mut h = Harness::new();
         h.loaded();
-        assert!(matches!(
-            &h.send(Event::TimelinePointer {
-                ratio: 0.5,
-                released: false
-            })[..],
-            [Effect::RestartScrubDebounce]
-        ));
+        h.send(Event::TimelinePointer {
+            ratio: 0.5,
+            released: false,
+        });
         assert_eq!(h.s().timeline.position_ms(), 2500);
+        assert_eq!(h.extracts(), [2500], "extracts while dragging");
+        // Further movement coalesces while that frame decodes...
+        for ratio in [0.52, 0.54, 0.56] {
+            h.send(Event::TimelinePointer {
+                ratio,
+                released: false,
+            });
+        }
+        assert!(h.extracts().is_empty());
+        // ...then the decoded frame is shown and the latest position follows.
+        h.complete_extract();
+        assert_eq!(h.s().current_frame_position_ms, Some(2500));
+        assert_eq!(h.extracts(), [2800]);
         h.send(Event::TimelinePointer {
             ratio: 0.6,
             released: true,
         });
-        assert!(matches!(h.fx[0], Effect::CancelScrubDebounce));
+        h.complete_extract();
+        assert_eq!(h.s().current_frame_position_ms, Some(2800));
         assert_eq!(h.extracts(), [3000]);
         h.complete_extract();
-        h.send(Event::TimelinePointer {
-            ratio: 0.1,
-            released: false,
-        });
-        h.send(Event::ScrubSettled);
-        assert_eq!(h.extracts(), [500]);
+        assert_eq!(h.s().current_frame_position_ms, Some(3000));
+        assert!(h.extracts().is_empty());
     }
 
     #[test]

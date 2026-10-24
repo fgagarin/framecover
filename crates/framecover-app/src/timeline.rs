@@ -3,11 +3,6 @@
 //! The Slint `Timeline` component only draws and reports pointer ratios; the
 //! position state, clamping and labels live here.
 
-use std::time::Duration;
-
-/// Delay after the last drag movement before the position is reported.
-pub const DEBOUNCE: Duration = Duration::from_millis(150);
-
 /// Duration and current position of the scrubber, in milliseconds.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Timeline {

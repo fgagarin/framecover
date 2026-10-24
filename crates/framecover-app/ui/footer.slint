@@ -1,4 +1,4 @@
-// Bottom bar: version, author, project link, About, update status (AppFooter).
+// Bottom bar: name and version (opens About), project link, update status (AppFooter).
 
 import { Theme } from "theme.slint";
 import { StatusDot } from "icons.slint";
@@ -18,6 +18,8 @@ component Separator inherits Rectangle {
 component Link inherits Rectangle {
     in property <string> text;
     in property <string> tooltip;
+    /// Muted until hovered (for the app name), instead of always link-coloured.
+    in property <bool> subtle;
     callback clicked();
     accessible-role: button;
     accessible-label: root.text;
@@ -26,16 +28,11 @@ component Link inherits Rectangle {
         spacing: 3px;
         label := FooterText {
             text: root.text;
-            color: Theme.link;
-            Rectangle {
-                y: parent.height - 2px;
-                height: 1px;
-                background: Theme.link;
-            }
+            color: !root.subtle || touch.has-hover ? Theme.link : Theme.muted;
         }
         @children
     }
-    TouchArea {
+    touch := TouchArea {
         mouse-cursor: pointer;
         clicked => { root.clicked(); }
     }
@@ -44,7 +41,6 @@ component Link inherits Rectangle {
 
 export component AppFooter inherits HorizontalLayout {
     in property <string> version;
-    in property <string> author;
     in property <string> project-url;
     in property <bool> status-visible;
     in property <string> status-text;
@@ -59,21 +55,18 @@ export component AppFooter inherits HorizontalLayout {
     spacing: 12px;
     height: 28px;
 
-    FooterText { text: "FrameCover " + root.version; }
-    VerticalLayout { alignment: center; Separator { } }
-    FooterText { text: "by " + root.author; }
+    Link {
+        text: "FrameCover " + root.version;
+        tooltip: "About FrameCover";
+        subtle: true;
+        clicked => { root.show-about(); }
+    }
     VerticalLayout { alignment: center; Separator { } }
     Link {
         text: "Project page";
         tooltip: root.project-url;
         clicked => { root.open-project-page(); }
         FooterText { text: "↗"; }
-    }
-    VerticalLayout { alignment: center; Separator { } }
-    Link {
-        text: "About";
-        tooltip: "About FrameCover and Slint";
-        clicked => { root.show-about(); }
     }
     Rectangle { horizontal-stretch: 1; }
 

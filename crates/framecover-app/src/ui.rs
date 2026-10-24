@@ -32,7 +32,6 @@ use crate::error_report::{
 use crate::filmstrip::{FilmJob, Filmstrip, TARGET_TILE_WIDTH, TILE_HEIGHT};
 use crate::services::Services;
 use crate::settings::Settings;
-use crate::timeline::DEBOUNCE;
 use crate::workers::{self, LoadOutcome, panic_message, spawn_guarded};
 use crate::{AppWindow, DialogData, DialogKind, FilmTile};
 
@@ -72,7 +71,6 @@ struct App {
     services: Services,
     settings: RefCell<Settings>,
     filmstrip: RefCell<Filmstrip<Image>>,
-    scrub_timer: Timer,
     progress_timer: Timer,
     frame_cache: RefCell<Option<Arc<RgbImage>>>,
     thumb_cache: RefCell<Option<Arc<RgbImage>>>,
@@ -103,7 +101,6 @@ pub fn run() {
         services,
         settings: RefCell::new(settings),
         filmstrip: RefCell::new(Filmstrip::default()),
-        scrub_timer: Timer::default(),
         progress_timer: Timer::default(),
         frame_cache: RefCell::new(None),
         thumb_cache: RefCell::new(None),
@@ -212,7 +209,6 @@ impl App {
     fn bind(self: &Rc<Self>) {
         let w = &self.window;
         w.set_version(framecover_core::VERSION.into());
-        w.set_author(AUTHOR_NAME.into());
         w.set_project_url(PROJECT_URL.into());
 
         macro_rules! on {
@@ -394,12 +390,6 @@ impl App {
                 self.filmstrip.borrow_mut().set_selected_position(ms);
                 self.render_filmstrip();
             }
-            Effect::RestartScrubDebounce => {
-                self.scrub_timer.start(TimerMode::SingleShot, DEBOUNCE, || {
-                    post(Event::ScrubSettled)
-                })
-            }
-            Effect::CancelScrubDebounce => self.scrub_timer.stop(),
             Effect::Save(job) => {
                 let services = self.services.clone();
                 spawn_guarded(

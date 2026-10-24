@@ -30,7 +30,6 @@ export component AppWindow inherits Window {
 
     // Footer
     in property <string> version;
-    in property <string> author;
     in property <string> project-url;
     in property <bool> update-visible;
     in property <string> update-text;
@@ -183,7 +182,6 @@ export component AppWindow inherits Window {
 
             AppFooter {
                 version: root.version;
-                author: root.author;
                 project-url: root.project-url;
                 status-visible: root.update-visible;
                 status-text: root.update-text;
