@@ -64,9 +64,23 @@ impl FrameSource for ExtractorFrameSource {
     }
 }
 
-/// Default bound on the bytes of decoded frames kept per stream
-/// (about 50 frames at 1080p, 12 at 4K).
+/// Bound on the bytes of decoded frames kept per stream for videos up to
+/// 1080p (about 50 frames at 1080p).
 pub const DEFAULT_CACHE_BYTES: usize = 300 << 20;
+
+/// Cache bound for videos larger than 1080p (about 43 frames at 4K, enough
+/// for a ~21-frame backward window).
+pub const LARGE_CACHE_BYTES: usize = 1 << 30;
+
+/// The cache budget [`FfmpegFrameStream::new`] uses for `video`.
+pub fn cache_budget_for(video: &VideoFile) -> usize {
+    let pixels = u64::from(video.width) * u64::from(video.height);
+    if pixels > 1920 * 1080 {
+        LARGE_CACHE_BYTES
+    } else {
+        DEFAULT_CACHE_BYTES
+    }
+}
 
 /// Most frames a backward step decodes ahead of time (about one second).
 const MAX_BACK_WINDOW_FRAMES: u64 = 25;
@@ -121,9 +135,11 @@ impl Costs {
 }
 
 impl FfmpegFrameStream {
-    /// A stream for `video` with the default cache budget.
+    /// A stream for `video` with the cache budget for its resolution
+    /// ([`cache_budget_for`]).
     pub fn new(video: VideoFile) -> Self {
-        Self::with_cache_budget(video, DEFAULT_CACHE_BYTES)
+        let budget = cache_budget_for(&video);
+        Self::with_cache_budget(video, budget)
     }
 
     /// A stream keeping at most about `budget_bytes` of decoded frames.
@@ -847,6 +863,26 @@ fn parse_start_us(line: &str) -> Option<i64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cache_budget_grows_above_1080p() {
+        let video = |width, height| VideoFile {
+            path: "v.mp4".into(),
+            format: crate::VideoFormat::Mp4,
+            duration_ms: 1000,
+            width,
+            height,
+            existing_thumbnail: None,
+            is_writable: true,
+            frame_step_ms: 40,
+            thumbnail_frame_number: None,
+            thumbnail_position_ms: None,
+        };
+        assert_eq!(cache_budget_for(&video(1920, 1080)), DEFAULT_CACHE_BYTES);
+        assert_eq!(cache_budget_for(&video(1080, 1920)), DEFAULT_CACHE_BYTES);
+        assert_eq!(cache_budget_for(&video(3840, 2160)), LARGE_CACHE_BYTES);
+        assert_eq!(cache_budget_for(&video(2560, 1440)), LARGE_CACHE_BYTES);
+    }
 
     fn frame(value: u8) -> Arc<RgbImage> {
         Arc::new(RgbImage::from_pixel(2, 2, image::Rgb([value; 3])))
