@@ -167,7 +167,9 @@ pub fn frame_step_ms(average: Option<Rational>, base: Option<Rational>) -> u64 {
         .unwrap_or(40)
 }
 
-const COVER_ATTACHMENT_NAMES: [&str; 4] = ["cover.jpg", "cover.png", "folder.jpg", "cover.jpeg"];
+/// Matroska attachment names treated as cover art (and replaced on save).
+pub(crate) const COVER_ATTACHMENT_NAMES: [&str; 4] =
+    ["cover.jpg", "cover.png", "folder.jpg", "cover.jpeg"];
 
 /// Embedded cover art: MP4/MOV `attached_pic` streams or MKV/WebM
 /// attachments named like a cover. Failures are treated as "no cover".

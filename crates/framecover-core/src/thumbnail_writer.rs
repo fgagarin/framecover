@@ -8,8 +8,9 @@
 //!   earlier versions) cannot skew the frame rate. Falls back
 //!   to a full H.264 re-encode that overlays the frame on frame 0.
 //! * MOV: always the full re-encode path.
-//! * MKV: cover attached with `-attach`.
-//! * AVI: remuxed (no cover art support).
+//! * MKV: all streams re-muxed, a previous cover-named attachment replaced by
+//!   a new `cover.jpg` attached with `-attach`.
+//! * AVI: all streams remuxed (no cover art support).
 //! * WebM / FLV: no container change.
 //!
 //! All mutations go through [`atomic_replace`]; the original is never left
@@ -1186,6 +1187,44 @@ fn remux_into(
     Ok(())
 }
 
+/// Input streams of an MKV the cover attachment replaces: attachments (or
+/// image attachments demuxed as `attached_pic` video) named like a cover.
+fn replaced_cover_streams(info: &ProbeInfo) -> Vec<usize> {
+    info.streams
+        .iter()
+        .filter(|s| {
+            let name = s.tag("filename").unwrap_or_default().to_lowercase();
+            crate::loader::COVER_ATTACHMENT_NAMES.contains(&name.as_str())
+        })
+        .map(|s| s.index)
+        .collect()
+}
+
+/// `ffmpeg` arguments re-muxing an MKV with all streams (audio, subtitles,
+/// fonts and other attachments) except replaced covers, plus the new
+/// `cover.jpg` attachment.
+fn mkv_attach_args(info: &ProbeInfo, input: &Path, cover: &Path, out: &Path) -> Vec<OsString> {
+    let replaced = replaced_cover_streams(info);
+    let mut args = args!["-y", "-i", input, "-map", "0"];
+    for index in &replaced {
+        args.extend(args!["-map", format!("-0:{index}")]);
+    }
+    // `-attach` adds the output stream after all mapped ones.
+    let attachment = info.streams.len() - replaced.len();
+    args.extend(args![
+        "-attach",
+        cover,
+        format!("-metadata:s:{attachment}"),
+        "mimetype=image/jpeg",
+        format!("-metadata:s:{attachment}"),
+        "filename=cover.jpg",
+        "-c",
+        "copy",
+        out,
+    ]);
+    args
+}
+
 /// Embed cover art into an MKV file using `ffmpeg -attach`.
 fn embed_mkv(video_path: &Path, jpeg_bytes: &[u8], stages: &mut Stages<'_>) -> Result<()> {
     stages.start("Preparing temporary files");
@@ -1196,25 +1235,13 @@ fn embed_mkv(video_path: &Path, jpeg_bytes: &[u8], stages: &mut Stages<'_>) -> R
     }
     let cover = mkstemp(&dir, ".vt_cover_", ".jpg")?;
     std::fs::write(&cover, jpeg_bytes)?;
+    let info = probe::probe(video_path)?;
     atomic_replace(
         video_path,
         |tmp| {
             remux_into(tmp, &dir, &ext, |out| {
                 stages.start("Attaching cover art");
-                args![
-                    "-y",
-                    "-i",
-                    tmp,
-                    "-attach",
-                    cover,
-                    "-metadata:s:t",
-                    "mimetype=image/jpeg",
-                    "-metadata:s:t",
-                    "filename=cover.jpg",
-                    "-c",
-                    "copy",
-                    out,
-                ]
+                mkv_attach_args(&info, tmp, &cover, out)
             })
         },
         true,
@@ -1233,7 +1260,7 @@ fn remux_avi(video_path: &Path, stages: &mut Stages<'_>) -> Result<()> {
         |tmp| {
             remux_into(tmp, &dir, ".avi", |out| {
                 stages.start("Remuxing video");
-                args!["-y", "-i", tmp, "-c", "copy", out]
+                args!["-y", "-i", tmp, "-map", "0", "-c", "copy", out]
             })
         },
         true,

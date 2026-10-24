@@ -210,3 +210,7 @@ with a comment per fix) and compares everything else against Python.
   repaired with `-bsf:v:0 setts=…`, so outputs keep the source frame rate and
   duration + one frame. The loader also reads already-drifted files with
   `r_frame_rate` (see `Stream::effective_rate`).
+- Behaviour 4 (default stream selection): MKV and AVI remuxes use `-map 0`;
+  `save_mkv_two_audio` keeps both audio tracks. MKV re-saves drop only
+  cover-named attachments (`cover.jpg`, `cover.png`, `cover.jpeg`,
+  `folder.jpg`) before attaching the new `cover.jpg`.

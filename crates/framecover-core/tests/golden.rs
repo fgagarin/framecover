@@ -679,6 +679,49 @@ fn apply_intentional_deviations(case: &str, golden: &mut Value, cmds: &mut [Valu
         }
         _ => {}
     }
+
+    // Fix 2 (README behaviour 4, default stream selection): MKV and AVI
+    // remuxes map every input stream (`-map 0`), so extra audio, subtitles and
+    // non-cover attachments survive. On MKV the previous cover-named
+    // attachment is excluded explicitly (`-map -0:<i>`) instead of being lost
+    // by accident, and the new attachment's metadata targets its own output
+    // stream (`-metadata:s:<n>`) rather than every attachment (`s:t`).
+    let mkv_attach = |cmds: &mut [Value], i: usize, removed: &[&str], out_index: usize| {
+        let mut maps = vec!["-map", "0"];
+        for r in removed {
+            maps.extend(["-map", r]);
+        }
+        insert_before(cmds, i, "-attach", &maps);
+        let spec = format!("-metadata:s:{out_index}");
+        for a in argv(cmds, i).iter_mut().filter(|a| *a == "-metadata:s:t") {
+            *a = Value::from(spec.as_str());
+        }
+    };
+    match case {
+        "save_mkv" => mkv_attach(cmds, 0, &[], 2),
+        "resave_mkv" => {
+            mkv_attach(cmds, 0, &[], 2);
+            // The first save's cover.jpg is input stream 2.
+            mkv_attach(cmds, 1, &["-0:2"], 2);
+        }
+        "save_mkv_two_audio" => {
+            mkv_attach(cmds, 0, &[], 3);
+            // Both audio tracks are kept: video, audio, audio, cover.
+            let streams = golden
+                .pointer_mut("/save/output/probe/streams")
+                .unwrap()
+                .as_array_mut()
+                .unwrap();
+            let second_audio = streams[1].clone();
+            streams.insert(2, second_audio);
+            for (i, s) in streams.iter_mut().enumerate() {
+                s["index"] = json!(i);
+            }
+            set(golden, "/save/output/probe/nb_streams", json!(4));
+        }
+        "save_avi" => insert_before(cmds, 0, "-c", &["-map", "0"]),
+        _ => {}
+    }
 }
 
 fn golden_cmd_manifest(cmds: &mut [Value], i: usize) -> &mut Value {

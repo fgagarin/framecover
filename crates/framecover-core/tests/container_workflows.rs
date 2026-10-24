@@ -55,6 +55,108 @@ fn mkv_full_pipeline_embeds_cover() {
     assert_eq!(dir_names(dir.path()), ["sample.mkv"]);
 }
 
+/// `(codec_type, codec_name, filename tag)` of every stream.
+fn stream_layout(path: &Path) -> Vec<(String, String, String)> {
+    probe::probe(path)
+        .unwrap()
+        .streams
+        .iter()
+        .map(|s| {
+            (
+                s.codec_type.clone(),
+                s.codec_name.clone().unwrap_or_default(),
+                s.tag("filename").unwrap_or_default().to_owned(),
+            )
+        })
+        .collect()
+}
+
+fn layout(entries: &[(&str, &str, &str)]) -> Vec<(String, String, String)> {
+    entries
+        .iter()
+        .map(|(a, b, c)| (a.to_string(), b.to_string(), c.to_string()))
+        .collect()
+}
+
+#[test]
+fn mkv_save_keeps_all_tracks_and_replaces_cover() {
+    let dir = tempfile::tempdir().unwrap();
+    let base = common::video_for_format(dir.path(), "mkv");
+    let srt = dir.path().join("subs.srt");
+    std::fs::write(&srt, "1\n00:00:00,000 --> 00:00:02,000\nHello\n").unwrap();
+    let font = dir.path().join("font.ttf");
+    std::fs::write(&font, b"not really a font").unwrap();
+    let path = dir.path().join("tracks.mkv");
+    let s = |p: &Path| p.to_str().unwrap().to_owned();
+    support::run_ffmpeg(&[
+        "-y",
+        "-i",
+        &s(&base),
+        "-i",
+        &s(&srt),
+        "-map",
+        "0:v",
+        "-map",
+        "0:a",
+        "-map",
+        "0:a",
+        "-map",
+        "1",
+        "-c",
+        "copy",
+        "-attach",
+        &s(&font),
+        "-metadata:s:t",
+        "mimetype=application/x-truetype-font",
+        "-metadata:s:t",
+        "filename=font.ttf",
+        &s(&path),
+    ]);
+    let expected_tracks = [
+        ("video", "h264", ""),
+        ("audio", "aac", ""),
+        ("audio", "aac", ""),
+        ("subtitle", "subrip", ""),
+        ("attachment", "ttf", "font.ttf"),
+    ];
+    assert_eq!(stream_layout(&path), layout(&expected_tracks));
+
+    let mut expected = expected_tracks.to_vec();
+    expected.push(("video", "mjpeg", "cover.jpg"));
+    // Saving twice replaces FrameCover's cover instead of adding another.
+    for _ in 0..2 {
+        let (success, message) = run_pipeline(&path);
+        assert!(success, "{message:?}");
+        assert_eq!(stream_layout(&path), layout(&expected));
+        assert!(support::load(&path).existing_thumbnail.is_some());
+    }
+}
+
+#[test]
+fn avi_remux_keeps_all_audio_tracks() {
+    let dir = tempfile::tempdir().unwrap();
+    let base = common::video_for_format(dir.path(), "avi");
+    let path = dir.path().join("two_audio.avi");
+    let s = |p: &Path| p.to_str().unwrap().to_owned();
+    support::run_ffmpeg(&[
+        "-y",
+        "-i",
+        &s(&base),
+        "-map",
+        "0:v",
+        "-map",
+        "0:a",
+        "-map",
+        "0:a",
+        "-c",
+        "copy",
+        &s(&path),
+    ]);
+    let (success, message) = run_pipeline(&path);
+    assert!(success, "{message:?}");
+    assert_eq!(support::codecs(&path, "audio").len(), 2);
+}
+
 #[test]
 fn webm_is_informational_noop() {
     let dir = tempfile::tempdir().unwrap();
