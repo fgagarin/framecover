@@ -804,6 +804,72 @@ fn apply_intentional_deviations(case: &str, golden: &mut Value, cmds: &mut Vec<V
         }
         _ => {}
     }
+
+    // Fix 6 (README behaviour 3): MOV takes the concat fast path too and
+    // stays QuickTime (`-f mov`, brand `qt  `, no `©too` item since the mov
+    // muxer does not write one), with the cover written as a `covr` item
+    // (the mov muxer drops attached_pic streams). Its commands are those of
+    // the same-shaped MP4 case (with the fixes above) on `.mov` paths, the
+    // final mux being `-f mov`; no `reencode_reason` any more.
+    let mov_like = match case {
+        "save_mov" => Some(("save_mp4", vec!["/save"])),
+        "resave_mov" => Some(("resave_mp4", vec!["/first_save", "/second_save"])),
+        _ => None,
+    };
+    if let Some((mp4_case, saves)) = mov_like {
+        set(golden, "/fixture/reencode_reason", Value::Null);
+        for at in saves {
+            set(golden, &format!("{at}/output/reencode_reason"), Value::Null);
+            set(
+                golden,
+                &format!("{at}/output/probe/major_brand"),
+                json!("qt  "),
+            );
+            let keys = golden
+                .pointer_mut(&format!("{at}/output/mp4_tags/keys"))
+                .unwrap()
+                .as_array_mut()
+                .unwrap();
+            keys.retain(|k| k != "©too");
+        }
+        let (mut mp4_golden, mp4_cmds) = load_golden(mp4_case).unwrap();
+        let mut mp4_cmds: Vec<Value> = mp4_cmds["commands"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|c| c.get("marker").is_none())
+            .cloned()
+            .collect();
+        apply_intentional_deviations(mp4_case, &mut mp4_golden, &mut mp4_cmds);
+        let as_mov = |s: &str| {
+            s.replace(
+                ".sample-thumbnail.save-XXXXXXXX.mp4",
+                ".sample-thumbnail.save-XXXXXXXX.mov",
+            )
+            .replace(
+                ".sample-thumbnail-thumbnail.save-XXXXXXXX.mp4",
+                ".sample-thumbnail-thumbnail.save-XXXXXXXX.mov",
+            )
+        };
+        for cmd in &mut mp4_cmds {
+            let is_concat = cmd.get("concat_manifest").is_some();
+            let argv = cmd["argv"].as_array_mut().unwrap();
+            for a in argv.iter_mut() {
+                *a = json!(as_mov(a.as_str().unwrap()));
+            }
+            if is_concat {
+                let n = argv.len();
+                assert_eq!(argv[n - 3], "-f");
+                argv[n - 2] = json!("mov");
+            }
+            if let Some(m) = cmd.get_mut("concat_manifest") {
+                for line in m.as_array_mut().unwrap() {
+                    *line = json!(as_mov(line.as_str().unwrap()));
+                }
+            }
+        }
+        *cmds = mp4_cmds;
+    }
 }
 
 /// Fix 5: rewrite the Python overlay re-encode (command `i`) into the

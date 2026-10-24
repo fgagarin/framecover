@@ -116,8 +116,11 @@ fn mov_full_pipeline_success() {
     let elapsed = start.elapsed().as_millis();
     assert!(result.success, "{:?}", result.error_message);
     assert!(elapsed < 10_000, "Pipeline took {elapsed}ms");
-    assert!(stages.iter().any(|s| s == "Encoding video"));
-    assert!(!stages.iter().any(|s| s == "Writing cover art"));
+    // MOV takes the concat fast path and stays QuickTime; the cover is a
+    // `covr` item (the mov muxer drops attached_pic streams).
+    assert!(stages.iter().any(|s| s == "Copying video streams"));
+    assert!(!stages.iter().any(|s| s == "Encoding video"));
+    assert!(stages.iter().any(|s| s == "Writing cover art"));
     assert!(support::has_attached_pic_stream(&mov));
     // One poster frame (40 ms) inserted before the source.
     assert_eq!(result.duration_shift_ms, 40);

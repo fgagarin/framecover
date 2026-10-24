@@ -8,7 +8,9 @@
 //!   earlier versions) cannot skew the frame rate. Falls back
 //!   to a full H.264 re-encode that inserts the frame the same way (one extra
 //!   first frame; a previously inserted one is trimmed on re-save).
-//! * MOV: always the full re-encode path.
+//! * MOV (`.mov`, `.m4v`): the same paths, muxed as QuickTime (`-f mov`);
+//!   the cover is written as a `covr` item since the mov muxer drops
+//!   attached_pic streams. Other MP4-family extensions always re-encode.
 //! * MKV: all streams re-muxed, a previous cover-named attachment replaced by
 //!   a new `cover.jpg` attached with `-attach`.
 //! * AVI: all streams remuxed (no cover art support).
@@ -588,7 +590,6 @@ impl ThumbnailWriter for FormatDispatchThumbnailWriter {
                             frame_number: position_ms
                                 .map(|p| py_round_div(p, video.frame_step_ms.max(1))),
                             frame_step_ms: video.frame_step_ms,
-                            write_mp4_covr: video.format == VideoFormat::Mp4,
                             replace_existing_preview: video.has_inserted_preview(),
                         },
                     )?;
@@ -634,8 +635,8 @@ impl ThumbnailWriter for FormatDispatchThumbnailWriter {
         if !video.format.is_mp4_family() {
             return None;
         }
-        if extension(&video.path) != ".mp4" {
-            return Some("The fast copy path supports .mp4 files only.".to_owned());
+        if fast_path_format(&extension(&video.path)).is_none() {
+            return Some("The fast copy path supports .mp4, .mov and .m4v files only.".to_owned());
         }
         let replace = video.has_inserted_preview();
         match concat_decision_for(&video.path, replace) {
@@ -714,7 +715,6 @@ struct Mp4Options {
     position_ms: Option<u64>,
     frame_number: Option<u64>,
     frame_step_ms: u64,
-    write_mp4_covr: bool,
     replace_existing_preview: bool,
 }
 
@@ -725,6 +725,17 @@ struct Mp4Temps {
     preview: tempfile::TempPath,
     concat: tempfile::TempPath,
     stripped: tempfile::TempPath,
+}
+
+/// Muxer by (lower-case) extension for the concat fast path: `.mp4` stays
+/// MP4, `.mov`/`.m4v` stay QuickTime. `None`: the fast path is unavailable
+/// and the re-encode muxes MP4.
+fn fast_path_format(ext: &str) -> Option<&'static str> {
+    match ext {
+        ".mp4" => Some("mp4"),
+        ".mov" | ".m4v" => Some("mov"),
+        _ => None,
+    }
 }
 
 /// Embed a preview and cover art into an MP4 or MOV file.
@@ -748,7 +759,9 @@ fn embed_mp4_mov(
     let info = probe::probe(video_path)?;
     let replace_existing_preview = opts.replace_existing_preview;
     let reencode = ReencodeParams::new(&info, video_path, opts.frame_step_ms)?;
-    let concat_params = if video_ext == ".mp4" {
+    // QuickTime extensions keep the QuickTime container (brand `qt  `).
+    let output_format = fast_path_format(&video_ext).unwrap_or("mp4");
+    let concat_params = if fast_path_format(&video_ext).is_some() {
         concat_decision(&info, video_path, replace_existing_preview)
             .0
             .filter(|_| {
@@ -767,7 +780,7 @@ fn embed_mp4_mov(
             })
     } else {
         debug!(
-            "concat fast path skipped for '{}': extension {} is not .mp4",
+            "concat fast path skipped for '{}': extension {} is not .mp4/.mov/.m4v",
             video_path.display(),
             py_repr_str(&video_ext)
         );
@@ -786,7 +799,6 @@ fn embed_mp4_mov(
     std::fs::write(&temps.frame, frame_bytes)?;
 
     let mut shift_ms = 0u64;
-    let output_format = "mp4";
     atomic_replace(
         video_path,
         |tmp_video_path| {
@@ -828,10 +840,10 @@ fn embed_mp4_mov(
                 Some(p) => Some(py_round_div(p, opts.frame_step_ms.max(1))),
                 None => opts.frame_number,
             };
-            if opts.write_mp4_covr {
-                stages.start("Writing cover art");
-                mp4_tags::write_covr(tmp_video_path, jpeg_bytes)?;
-            }
+            // MP4 muxes the attached_pic as `covr` already, but QuickTime
+            // (`-f mov`) drops it: the `covr` item is the cover there.
+            stages.start("Writing cover art");
+            mp4_tags::write_covr(tmp_video_path, jpeg_bytes)?;
             stages.start("Writing frame metadata");
             write_source_metadata(tmp_video_path, shifted_frame_number, shifted_position_ms)
         },

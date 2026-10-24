@@ -215,6 +215,10 @@ with a comment per fix) and compares everything else against Python.
   `-itsoffset`, reports `duration_shift_ms` 40 and shifted tags (2040 / 51),
   and forces a keyframe on the first source frame. A re-save trims the old
   preview (or strips it by stream copy when the file is concat-eligible).
+- Behaviour 3 (MOV always re-encoded as `isom`): `.mov`/`.m4v` take the
+  concat fast path (or the re-encode) muxed with `-f mov`, so outputs keep
+  brand `qt  `; the cover is written as a `covr` item. `save_mov` and
+  `resave_mov` expect the `save_mp4`/`resave_mp4` commands on `.mov` paths.
 - Behaviour 4 (default stream selection): MKV and AVI remuxes use `-map 0`;
   `save_mkv_two_audio` keeps both audio tracks. MKV re-saves drop only
   cover-named attachments (`cover.jpg`, `cover.png`, `cover.jpeg`,

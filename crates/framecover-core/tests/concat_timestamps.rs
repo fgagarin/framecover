@@ -546,3 +546,85 @@ fn resave_of_legacy_overlay_reencode_trims_first_frame() {
     let video = FfprobeVideoLoader.load(&legacy).unwrap();
     assert_eq!(FormatDispatchThumbnailWriter.reencode_reason(&video), None);
 }
+
+// --- QuickTime ----------------------------------------------------------------
+
+fn major_brand(path: &Path) -> String {
+    let v = ffprobe_json(&["-show_format"], path);
+    v["format"]["tags"]["major_brand"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned()
+}
+
+/// Saved QuickTime file: still QuickTime, cover and tags readable.
+fn assert_quicktime_output(path: &Path, position_ms: u64, frame_number: u64) {
+    assert_eq!(major_brand(path), "qt  ");
+    assert!(support::has_attached_pic_stream(path));
+    let video = FfprobeVideoLoader.load(path).unwrap();
+    assert_eq!(video.format, framecover_core::VideoFormat::Mov);
+    assert!(video.existing_thumbnail.is_some());
+    assert_eq!(video.thumbnail_position_ms, Some(position_ms));
+    assert_eq!(video.thumbnail_frame_number, Some(frame_number));
+    assert_eq!(
+        mp4_tags::read_thumbnail_source(path),
+        (Some(frame_number), Some(position_ms))
+    );
+    assert_preview_first(path);
+}
+
+#[test]
+fn mov_takes_fast_path_and_stays_quicktime() {
+    let dir = tempfile::tempdir().unwrap();
+    let source = common::video_for_format(dir.path(), "mov");
+    assert_eq!(major_brand(&source), "qt  ");
+    for ext in ["mov", "m4v"] {
+        let target = copy_of(&source, &format!("target.{ext}"));
+        let video = FfprobeVideoLoader.load(&target).unwrap();
+        assert_eq!(FormatDispatchThumbnailWriter.reencode_reason(&video), None);
+        let mut stages = Vec::new();
+        let mut cb = |n: &str, e: Option<f64>| {
+            if e.is_none() {
+                stages.push(n.to_owned())
+            }
+        };
+        let result = FormatDispatchThumbnailWriter.write(&video, &red(), Some(2000), Some(&mut cb));
+        assert!(result.success, "{:?}", result.error_message);
+        assert!(!stages.iter().any(|s| s == "Encoding video"), "{stages:?}");
+        assert_eq!(result.duration_shift_ms, 40);
+        assert_quicktime_output(&target, 2040, 51);
+        assert_regular(&target, 512);
+        assert_shifted_by_one_frame(&source, &target, 512);
+        let shift = audio_start_secs(&target) - audio_start_secs(&source);
+        assert!((shift - 0.04).abs() < 0.002, "audio shift {shift}");
+
+        // Re-save: preview replaced, still QuickTime.
+        let frames = support::frame_count(&target);
+        let result = save(&target, 3000);
+        assert_eq!(result.duration_shift_ms, 0);
+        assert_eq!(support::frame_count(&target), frames);
+        assert_quicktime_output(&target, 3000, 75);
+        assert_regular(&target, 512);
+    }
+}
+
+#[test]
+fn ineligible_mov_reencodes_into_quicktime() {
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("yuv444p.mov");
+    common::generate_video(
+        &source,
+        2,
+        320,
+        240,
+        &["-c:v", "libx264", "-c:a", "aac", "-pix_fmt", "yuv444p"],
+    );
+    let target = copy_of(&source, "target.mov");
+    let result = save(&target, 1000);
+    assert_eq!(result.duration_shift_ms, 40);
+    assert_quicktime_output(&target, 1040, 26);
+    assert_eq!(
+        support::frame_count(&target),
+        support::frame_count(&source) + 1
+    );
+}

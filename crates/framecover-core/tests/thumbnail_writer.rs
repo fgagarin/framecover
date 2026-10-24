@@ -67,10 +67,17 @@ fn reencode_reason_uses_concat_eligibility() {
 #[test]
 fn reencode_reason_for_non_mp4() {
     let dir = tempfile::tempdir().unwrap();
-    let mov = support::load(&common::video_for_format(dir.path(), "mov"));
+    // Eligible MOV takes the fast path.
+    let mov_path = common::video_for_format(dir.path(), "mov");
+    assert_eq!(writer().reencode_reason(&support::load(&mov_path)), None);
+    // Other MP4-family extensions do not.
+    let other = dir.path().join("sample.3gp");
+    std::fs::copy(&mov_path, &other).unwrap();
+    let mut video = support::load(&mov_path);
+    video.path = other;
     assert_eq!(
-        writer().reencode_reason(&mov).as_deref(),
-        Some("The fast copy path supports .mp4 files only.")
+        writer().reencode_reason(&video).as_deref(),
+        Some("The fast copy path supports .mp4, .mov and .m4v files only.")
     );
     let mkv = support::load(&common::video_for_format(dir.path(), "mkv"));
     assert_eq!(writer().reencode_reason(&mkv), None);
