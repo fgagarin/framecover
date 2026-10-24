@@ -1,0 +1,166 @@
+// Vector icons, ported from the QPainter drawings in start_screen.py and
+// preview_widget.py. Each icon draws in a 64x64 (or 32x32) view box.
+
+import { Theme } from "theme.slint";
+
+component IconPath inherits Path {
+    viewbox-x: 0;
+    viewbox-y: 0;
+    viewbox-width: 64;
+    viewbox-height: 64;
+    width: 100%;
+    height: 100%;
+    stroke-line-cap: round;
+    stroke-line-join: round;
+}
+
+// Sun and mountains inside a picture frame.
+component Mountains inherits Rectangle {
+    in property <string> sun;
+    in property <string> ridge;
+    IconPath { commands: root.sun; fill: Theme.accent; }
+    IconPath { commands: root.ridge; fill: Theme.accent; }
+}
+
+export component OpenFileIcon inherits Rectangle {
+    IconPath {
+        commands: "M14 6 L40 6 L52 18 L52 58 L14 58 Z";
+        fill: Theme.accent.with-alpha(25 / 255);
+        stroke: Theme.accent;
+        stroke-width: 4px * root.width / 64px;
+    }
+    IconPath {
+        commands: "M40 6 L40 18 L52 18";
+        stroke: Theme.accent;
+        stroke-width: 4px * root.width / 64px;
+    }
+    IconPath {
+        commands: "M26 27 L26 47 L42 37 Z";
+        fill: Theme.accent-dark;
+    }
+}
+
+export component ChooseFrameIcon inherits Rectangle {
+    // Film strip
+    IconPath {
+        commands: "M5 18 L59 18 Q62 18 62 21 L62 43 Q62 46 59 46 L5 46 Q2 46 2 43 L2 21 Q2 18 5 18 Z";
+        fill: Theme.accent.with-alpha(45 / 255);
+    }
+    IconPath {
+        commands: "M5 22 h4 v4 h-4 Z M5 30 h4 v4 h-4 Z M5 38 h4 v4 h-4 Z M55 22 h4 v4 h-4 Z M55 30 h4 v4 h-4 Z M55 38 h4 v4 h-4 Z";
+        fill: #ffffffaa;
+    }
+    // Selected frame
+    IconPath {
+        commands: "M17 16 L47 16 Q50 16 50 19 L50 45 Q50 48 47 48 L17 48 Q14 48 14 45 L14 19 Q14 16 17 16 Z";
+        fill: #ffffffc8;
+        stroke: Theme.accent;
+        stroke-width: 3.5px * root.width / 64px;
+    }
+    Mountains {
+        sun: "M24.2 28.3 A2.6 2.6 0 1 0 29.4 28.3 A2.6 2.6 0 1 0 24.2 28.3 Z";
+        ridge: "M19 43 L28.88 31.45 L34.08 36.7 L37.72 33.55 L45 43 Z";
+    }
+    // Playhead
+    IconPath {
+        commands: "M32 4 L32 60";
+        stroke: Theme.accent-dark;
+        stroke-width: 4px * root.width / 64px;
+    }
+}
+
+export component SavePreviewIcon inherits Rectangle {
+    IconPath {
+        commands: "M14 12 L50 12 Q56 12 56 18 L56 46 Q56 52 50 52 L14 52 Q8 52 8 46 L8 18 Q8 12 14 12 Z";
+        fill: Theme.accent.with-alpha(25 / 255);
+        stroke: Theme.accent;
+        stroke-width: 4px * root.width / 64px;
+    }
+    Mountains {
+        sun: "M20.6 26.7 A3.8 3.8 0 1 0 28.2 26.7 A3.8 3.8 0 1 0 20.6 26.7 Z";
+        ridge: "M13 47 L27.44 31.05 L35.04 38.3 L40.36 33.95 L51 47 Z";
+    }
+}
+
+export component FolderIcon inherits Rectangle {
+    IconPath {
+        commands: "M8 18 Q8 13 13 13 L24 13 L30 19 L51 19 Q56 19 56 24 L56 47 Q56 52 51 52 L13 52 Q8 52 8 47 Z M8 25 L56 25";
+        stroke: Theme.accent;
+        stroke-width: 3.5px * root.width / 64px;
+    }
+}
+
+// Yellow "open" folder for the path bar (stands in for SP_DialogOpenButton).
+export component OpenFolderIcon inherits Rectangle {
+    IconPath {
+        commands: "M6 14 Q6 10 10 10 L24 10 L29 15 L54 15 Q58 15 58 19 L58 50 Q58 54 54 54 L10 54 Q6 54 6 50 Z";
+        fill: #d99a26;
+    }
+    IconPath {
+        commands: "M6 24 L58 24 L58 50 Q58 54 54 54 L10 54 Q6 54 6 50 Z";
+        fill: #f4bf4f;
+    }
+}
+
+// White download/save glyph of the Save button.
+export component SaveGlyph inherits Rectangle {
+    IconPath {
+        viewbox-width: 32;
+        viewbox-height: 32;
+        commands: "M16 4 L16 19 M10 13 L16 19 L22 13 M6 20 L6 27 L26 27 L26 20";
+        stroke: white;
+        stroke-width: 2.4px * root.width / 32px;
+    }
+}
+
+// Rotating 275° arc shown while saving.
+export component Spinner inherits Rectangle {
+    in property <bool> running;
+    IconPath {
+        viewbox-width: 24;
+        viewbox-height: 24;
+        commands: "M20 12 A8 8 0 1 1 11.3 4.03";
+        stroke: white;
+        stroke-width: 2.5px * root.width / 24px;
+        transform-origin: { x: self.width / 2, y: self.height / 2 };
+        transform-rotation: root.running ? (mod(animation-tick() / 1ms, 960) / 960) * 360deg : 0deg;
+    }
+}
+
+// Warning triangle (stands in for SP_MessageBoxWarning).
+export component WarningIcon inherits Rectangle {
+    IconPath {
+        viewbox-width: 32;
+        viewbox-height: 32;
+        commands: "M16 3 Q17.2 3 17.9 4.2 L30.4 26.4 Q31.4 28.5 29 28.5 L3 28.5 Q0.6 28.5 1.6 26.4 L14.1 4.2 Q14.8 3 16 3 Z";
+        fill: #ffb900;
+        stroke: #c78c00;
+        stroke-width: 1px * root.width / 32px;
+    }
+    IconPath {
+        viewbox-width: 32;
+        viewbox-height: 32;
+        commands: "M16 11 L16 19 M16 23.5 L16 23.6";
+        stroke: #1a1a1a;
+        stroke-width: 2.6px * root.width / 32px;
+    }
+}
+
+export component ChevronDown inherits Rectangle {
+    in property <color> tint: white;
+    IconPath {
+        viewbox-width: 16;
+        viewbox-height: 16;
+        commands: "M4 6 L8 10 L12 6";
+        stroke: root.tint;
+        stroke-width: 1.6px * root.width / 16px;
+    }
+}
+
+export component StatusDot inherits Rectangle {
+    in property <color> tint;
+    width: 10px;
+    height: 10px;
+    border-radius: self.width / 2;
+    background: root.tint;
+}

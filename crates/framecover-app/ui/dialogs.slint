@@ -1,0 +1,241 @@
+// In-window modal dialogs (QMessageBox / QProgressDialog / ErrorDialog ports).
+
+import { Button, CheckBox, TextEdit, ProgressIndicator, AboutSlint, ScrollView } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { WarningIcon } from "icons.slint";
+
+export enum DialogKind {
+    none,
+    info,
+    convert-offer,
+    converting,
+    overwrite-warning,
+    copy-conflict,
+    about,
+    error,
+}
+
+/// Content of the visible dialog, filled from Rust.
+export struct DialogData {
+    kind: DialogKind,
+    title: string,
+    text: string,
+    /// Error stack trace, or the conflict dialog's informative text.
+    details: string,
+}
+
+component Card inherits Rectangle {
+    in property <string> title;
+    in property <length> card-width: 520px;
+    background: #00000066;
+    // Swallow clicks on the backdrop.
+    TouchArea { }
+    card := Rectangle {
+        width: min(root.card-width, root.width - 32px);
+        height: min(layout.preferred-height, root.height - 32px);
+        x: (root.width - self.width) / 2;
+        y: (root.height - self.height) / 2;
+        background: Theme.window-background;
+        border-radius: 8px;
+        border-width: 1px;
+        border-color: Theme.panel-border;
+        drop-shadow-blur: 24px;
+        drop-shadow-color: #00000060;
+        layout := VerticalLayout {
+            padding: 20px;
+            spacing: 12px;
+            Text {
+                text: root.title;
+                font-size: 17px;
+                font-weight: 600;
+                wrap: word-wrap;
+                color: Theme.text;
+            }
+            @children
+        }
+    }
+}
+
+component Body inherits Text {
+    wrap: word-wrap;
+    font-size: 13px;
+    color: Theme.text;
+}
+
+component ButtonRow inherits HorizontalLayout {
+    spacing: 8px;
+    alignment: end;
+}
+
+export component DialogLayer inherits Rectangle {
+    in property <DialogData> data;
+    callback dismiss();
+    callback convert-answer(bool);
+    /// 0 = save a copy, 1 = overwrite, 2 = cancel.
+    callback overwrite-answer(int, bool);
+    /// 0 = another suffix, 1 = overwrite, 2 = cancel.
+    callback conflict-answer(int);
+    callback find-cause();
+    callback report-problem();
+
+    /// Local state of the overwrite warning and error dialog.
+    in-out property <bool> suppress-warning;
+    in-out property <bool> details-shown;
+    in-out property <bool> copied;
+
+    /// Return / Escape handling for the visible dialog.
+    public function accept-default() {
+        if data.kind == DialogKind.info || data.kind == DialogKind.about || data.kind == DialogKind.error {
+            root.dismiss();
+        } else if data.kind == DialogKind.convert-offer {
+            root.convert-answer(false);
+        } else if data.kind == DialogKind.overwrite-warning {
+            root.overwrite-answer(0, root.suppress-warning);
+        } else if data.kind == DialogKind.copy-conflict {
+            root.conflict-answer(0);
+        }
+    }
+    public function cancel() {
+        if data.kind == DialogKind.info || data.kind == DialogKind.about || data.kind == DialogKind.error {
+            root.dismiss();
+        } else if data.kind == DialogKind.convert-offer {
+            root.convert-answer(false);
+        } else if data.kind == DialogKind.overwrite-warning {
+            root.overwrite-answer(2, false);
+        } else if data.kind == DialogKind.copy-conflict {
+            root.conflict-answer(2);
+        }
+    }
+
+    visible: data.kind != DialogKind.none;
+
+    if data.kind == DialogKind.info: Card {
+        title: data.title;
+        ScrollView {
+            min-height: min(info-text.preferred-height, 80px);
+            preferred-height: info-text.preferred-height;
+            info-text := Body { width: parent.width; text: data.text; }
+        }
+        ButtonRow {
+            Button { text: "OK"; primary: true; clicked => { root.dismiss(); } }
+        }
+    }
+
+    if data.kind == DialogKind.convert-offer: Card {
+        title: data.title;
+        Body { text: data.text; }
+        ButtonRow {
+            Button { text: "Yes"; clicked => { root.convert-answer(true); } }
+            Button { text: "No"; primary: true; clicked => { root.convert-answer(false); } }
+        }
+    }
+
+    if data.kind == DialogKind.converting: Card {
+        title: data.title;
+        card-width: 420px;
+        Body { text: data.text; }
+        ProgressIndicator { indeterminate: true; height: 6px; }
+    }
+
+    if data.kind == DialogKind.overwrite-warning: Card {
+        title: data.title;
+        HorizontalLayout {
+            spacing: 12px;
+            VerticalLayout {
+                alignment: start;
+                WarningIcon { width: 32px; height: 32px; }
+            }
+            Body { text: data.text; }
+        }
+        CheckBox {
+            text: "Do not show this warning until the program restarts";
+            checked <=> root.suppress-warning;
+        }
+        ButtonRow {
+            Button { text: "Save a copy"; primary: true; clicked => { root.overwrite-answer(0, root.suppress-warning); } }
+            Button { text: "Overwrite"; clicked => { root.overwrite-answer(1, root.suppress-warning); } }
+            Button { text: "Cancel"; clicked => { root.overwrite-answer(2, false); } }
+        }
+    }
+
+    if data.kind == DialogKind.copy-conflict: Card {
+        title: data.title;
+        HorizontalLayout {
+            spacing: 12px;
+            VerticalLayout {
+                alignment: start;
+                WarningIcon { width: 32px; height: 32px; }
+            }
+            VerticalLayout {
+                spacing: 8px;
+                Body { text: data.text; }
+                if data.details != "": Body { text: data.details; color: Theme.muted; font-size: 12px; }
+            }
+        }
+        ButtonRow {
+            Button { text: "Add another suffix"; primary: true; clicked => { root.conflict-answer(0); } }
+            Button { text: "Overwrite"; clicked => { root.conflict-answer(1); } }
+            Button { text: "Cancel"; clicked => { root.conflict-answer(2); } }
+        }
+    }
+
+    if data.kind == DialogKind.about: Card {
+        title: "About FrameCover";
+        card-width: 460px;
+        Body { text: data.text; }
+        HorizontalLayout {
+            alignment: center;
+            AboutSlint { max-width: 300px; }
+        }
+        ButtonRow {
+            Button { text: "Close"; primary: true; clicked => { root.dismiss(); } }
+        }
+    }
+
+    if data.kind == DialogKind.error: Card {
+        title: data.title;
+        card-width: 640px;
+        ScrollView {
+            min-height: min(error-text.preferred-height, 120px);
+            preferred-height: error-text.preferred-height;
+            error-text := Body { width: parent.width; text: data.text; }
+        }
+        details := TextEdit {
+            visible: root.details-shown;
+            height: root.details-shown ? 220px : 0px;
+            text: data.details;
+            read-only: true;
+            wrap: no-wrap;
+            font-size: 12px;
+            font-family: "Consolas, Menlo, DejaVu Sans Mono, monospace";
+        }
+        HorizontalLayout {
+            spacing: 8px;
+            Button {
+                text: root.details-shown ? "Hide details" : "Show details";
+                clicked => { root.details-shown = !root.details-shown; }
+            }
+            Button {
+                text: root.copied ? "Copied" : "Copy stack trace";
+                clicked => {
+                    details.select-all();
+                    details.copy();
+                    details.clear-selection();
+                    root.copied = true;
+                }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            Button {
+                text: "Find the cause";
+                clicked => { root.find-cause(); }
+                Tooltip { text: @markdown("Search Google (AI Mode) for the cause of this error"); }
+            }
+            Button {
+                text: "Report a problem";
+                clicked => { root.report-problem(); }
+                Tooltip { text: @markdown("Open a new issue on GitHub"); }
+            }
+            Button { text: "Close"; primary: true; clicked => { root.dismiss(); } }
+        }
+    }
+}

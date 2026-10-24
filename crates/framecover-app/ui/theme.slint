@@ -1,0 +1,44 @@
+// Colours of the Qt version. Neutral surfaces follow the OS light/dark
+// scheme through the std-widgets Palette; brand colours are fixed.
+
+import { Palette } from "std-widgets.slint";
+
+export global Theme {
+    out property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+
+    // Brand
+    out property <color> accent: #5b6cf0;
+    out property <color> accent-dark: #4c45d8;
+    out property <color> link: dark ? #8f9bff : #4f5fe6;
+    out property <color> muted: dark ? #9ca3af : #6b7280;
+
+    // Surfaces
+    out property <brush> window-background: Palette.background;
+    out property <brush> text: Palette.foreground;
+    out property <color> panel-background: dark ? #2b2b2b : #ffffff;
+    out property <color> panel-border: dark ? #3d3d3d : #dcdcdc;
+    out property <color> separator: #80808060;
+
+    // Save button (Windows accent blue)
+    out property <color> primary: #0078d4;
+    out property <color> primary-hover: #006cbe;
+    out property <color> primary-pressed: #005a9e;
+    out property <color> primary-border: #005a9e;
+    out property <color> primary-disabled: dark ? #3b5f7c : #8ab9dc;
+
+    // Filmstrip / timeline
+    out property <color> tile-background: dark ? #3a3d41 : #e4e7eb;
+    out property <color> tile-border: dark ? #5a5f66 : #aeb4bb;
+    out property <color> tile-selected: #0078d4;
+    out property <color> track: dark ? #555555 : #cccccc;
+    out property <color> track-fill: #0078d4;
+    out property <color> handle: #005a9e;
+    out property <color> timeline-label: dark ? #dddddd : #333333;
+    out property <color> path-text: dark ? #aaaaaa : #666666;
+
+    // Update status dots
+    out property <color> dot-idle: #9ca3af;
+    out property <color> dot-latest: #3b82f6;
+    out property <color> dot-update: #22c55e;
+    out property <color> dot-error: #f59e0b;
+}
