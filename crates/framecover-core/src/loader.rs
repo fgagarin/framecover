@@ -48,7 +48,7 @@ impl VideoLoader for FfprobeVideoLoader {
         let duration_ms = duration_ms(stream, &info);
         let width = stream.width.unwrap_or(0);
         let height = stream.height.unwrap_or(0);
-        let frame_step_ms = frame_step_ms(stream.average_rate(), stream.base_rate());
+        let frame_step_ms = frame_step_ms(stream.effective_rate(), stream.base_rate());
         let existing_thumbnail = extract_existing_thumbnail(&abs_path, &info);
         let is_writable = is_writable(&abs_path);
         let (thumbnail_frame_number, thumbnail_position_ms) = if format.is_mp4_family() {
@@ -112,7 +112,22 @@ pub fn detect_format(format_name: &str, path: &Path) -> VideoFormat {
 }
 
 /// Stream duration if known, else container duration; truncated to ms.
+///
+/// For a stream with a drifted average frame rate (see
+/// [`Stream::effective_rate`]) the reported duration is too short by the
+/// squashed frames, so it is raised to `nb_frames / r_frame_rate` when the
+/// frame count is known.
 fn duration_ms(stream: &Stream, info: &ProbeInfo) -> u64 {
+    let reported = reported_duration_ms(stream, info);
+    if stream.has_rate_drift()
+        && let (Some(frames), Some(rate)) = (stream.nb_frames(), stream.base_rate())
+    {
+        return reported.max(to_ms(frames as f64 * 1000.0 / rate.to_f64()));
+    }
+    reported
+}
+
+fn reported_duration_ms(stream: &Stream, info: &ProbeInfo) -> u64 {
     if let (Some(ts), Some(tb)) = (stream.duration_ts(), stream.time_base()) {
         // Same float arithmetic as `float(stream.duration) * float(time_base) * 1000`.
         return to_ms(ts as f64 * tb.to_f64() * 1000.0);
@@ -152,7 +167,9 @@ pub fn frame_step_ms(average: Option<Rational>, base: Option<Rational>) -> u64 {
         .unwrap_or(40)
 }
 
-const COVER_ATTACHMENT_NAMES: [&str; 4] = ["cover.jpg", "cover.png", "folder.jpg", "cover.jpeg"];
+/// Matroska attachment names treated as cover art (and replaced on save).
+pub(crate) const COVER_ATTACHMENT_NAMES: [&str; 4] =
+    ["cover.jpg", "cover.png", "folder.jpg", "cover.jpeg"];
 
 /// Embedded cover art: MP4/MOV `attached_pic` streams or MKV/WebM
 /// attachments named like a cover. Failures are treated as "no cover".
@@ -299,8 +316,21 @@ mod tests {
         // Python rounds half to even: 1000/80 = 12.5 -> 12.
         assert_eq!(frame_step_ms(r("80/1"), None), 12);
         assert_eq!(frame_step_ms(r("100000/1"), None), 1);
-        // Concat fast-path outputs drift to 1575/62 fps (golden README).
+        // Raw average of a drifted file; the loader passes the effective rate.
         assert_eq!(frame_step_ms(r("1575/62"), r("25/1")), 39);
+    }
+
+    #[test]
+    fn drifted_average_uses_base_rate_and_frame_count() {
+        // Output of the old concat fast path (golden README, behaviour 1).
+        let json = br#"{"streams":[{"index":0,"codec_type":"video","time_base":"1/12800",
+            "avg_frame_rate":"1575/62","r_frame_rate":"25/1","nb_frames":"126",
+            "duration_ts":63488,"duration":"4.960000"}],
+            "format":{"format_name":"mov","duration":"5.040000"}}"#;
+        let info = probe::parse(json).unwrap();
+        let s = &info.streams[0];
+        assert_eq!(frame_step_ms(s.effective_rate(), s.base_rate()), 40);
+        assert_eq!(duration_ms(s, &info), 5040);
     }
 
     #[test]

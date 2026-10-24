@@ -203,3 +203,34 @@ goldens. Decide deliberately whether the port matches them or fixes them.
    - MP4/MOV use the video *stream* duration (`stream.duration * time_base`).
    - MKV/WebM/FLV have no stream duration and fall back to the container
      duration (5023, 5008 and 5080 ms for 5 s fixtures).
+
+## Intentional deviations of the Rust port
+
+Some of the behaviours above are bugs that were fixed after the port reached
+parity. The golden files are **not** regenerated: `tests/golden.rs` patches
+exactly the expected values each fix changes (`apply_intentional_deviations`,
+with a comment per fix) and compares everything else against Python.
+
+- Behaviour 1 (frame rate drift): the concat output's leading DTS are
+  repaired with `-bsf:v:0 setts=…`, so outputs keep the source frame rate and
+  duration + one frame. The loader also reads already-drifted files with
+  `r_frame_rate` (see `Stream::effective_rate`).
+- Behaviour 2 (re-encode overwrites frame 0): the re-encode inserts the poster
+  as an extra first frame (`concat` filter), shifts audio/subtitles with
+  `-itsoffset`, reports `duration_shift_ms` 40 and shifted tags (2040 / 51),
+  and forces a keyframe on the first source frame. A re-save trims the old
+  preview (or strips it by stream copy when the file is concat-eligible).
+- Behaviour 3 (MOV always re-encoded as `isom`): `.mov`/`.m4v` take the
+  concat fast path (or the re-encode) muxed with `-f mov`, so outputs keep
+  brand `qt  `; the cover is written as a `covr` item. `save_mov` and
+  `resave_mov` expect the `save_mp4`/`resave_mp4` commands on `.mov` paths.
+- Behaviour 4 (default stream selection): MKV and AVI remuxes use `-map 0`;
+  `save_mkv_two_audio` keeps both audio tracks. MKV re-saves drop only
+  cover-named attachments (`cover.jpg`, `cover.png`, `cover.jpeg`,
+  `folder.jpg`) before attaching the new `cover.jpg`.
+- Behaviour 5 (misleading messages): WebM/FLV/AVI successes carry
+  `thumbnail_writer::no_cover_art_note`, which makes no platform claim.
+- Behaviour 8 (wasted remux): the converter checks the source's codec,
+  profile, pixel format and dimensions first
+  (`thumbnail_writer::remux_ineligibility_reason`); `convert_mpg` and
+  `convert_wmv` encode without attempting the remux.

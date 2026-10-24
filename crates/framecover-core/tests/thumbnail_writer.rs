@@ -67,10 +67,17 @@ fn reencode_reason_uses_concat_eligibility() {
 #[test]
 fn reencode_reason_for_non_mp4() {
     let dir = tempfile::tempdir().unwrap();
-    let mov = support::load(&common::video_for_format(dir.path(), "mov"));
+    // Eligible MOV takes the fast path.
+    let mov_path = common::video_for_format(dir.path(), "mov");
+    assert_eq!(writer().reencode_reason(&support::load(&mov_path)), None);
+    // Other MP4-family extensions do not.
+    let other = dir.path().join("sample.3gp");
+    std::fs::copy(&mov_path, &other).unwrap();
+    let mut video = support::load(&mov_path);
+    video.path = other;
     assert_eq!(
-        writer().reencode_reason(&mov).as_deref(),
-        Some("The fast copy path supports .mp4 files only.")
+        writer().reencode_reason(&video).as_deref(),
+        Some("The fast copy path supports .mp4, .mov and .m4v files only.")
     );
     let mkv = support::load(&common::video_for_format(dir.path(), "mkv"));
     assert_eq!(writer().reencode_reason(&mkv), None);
@@ -328,11 +335,12 @@ fn existing_foreign_cover_forces_full_reencode() {
     );
     let (result, events) = write_collecting(&video, &red(), Some(2000));
     assert!(result.success, "{:?}", result.error_message);
-    assert_eq!(result.duration_shift_ms, 0);
+    // The re-encode inserts the poster as an extra frame, like the fast path.
+    assert_eq!(result.duration_shift_ms, 40);
     assert!(started(&events).iter().any(|s| s == "Encoding video"));
     let reopened = support::load(&path);
-    assert_eq!(reopened.thumbnail_position_ms, Some(2000));
-    assert_eq!(reopened.thumbnail_frame_number, Some(50));
+    assert_eq!(reopened.thumbnail_position_ms, Some(2040));
+    assert_eq!(reopened.thumbnail_frame_number, Some(51));
 }
 
 #[test]
@@ -365,7 +373,8 @@ fn flv_returns_informational_success_without_changes() {
     assert_eq!(
         result.error_message.as_deref(),
         Some(
-            "FLV does not support embedded cover art; Linux file manager icon updated via XDG cache"
+            "FLV files can't hold cover art; the video is unchanged and only the file \
+             manager's thumbnail is refreshed."
         )
     );
     assert_eq!(std::fs::read(&path).unwrap(), original);

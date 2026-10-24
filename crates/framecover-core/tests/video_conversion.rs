@@ -54,7 +54,13 @@ fn conversion_then_thumbnail(codec: &str, profile: Option<&str>, transcode: bool
     );
     assert!(!out.to_string_lossy().starts_with(r"\\?\"));
     assert_eq!(std::fs::read(&source).unwrap(), original);
-    assert_eq!(stages.len(), if transcode { 2 } else { 1 }, "{stages:?}");
+    // Sources that cannot be concat-compatible skip the remux entirely.
+    let expected_stages = if transcode {
+        "Encoding MP4 with libx264 / AAC"
+    } else {
+        "Remuxing to MP4 without re-encoding"
+    };
+    assert_eq!(stages, [expected_stages]);
     assert_eq!(support::codecs(&target, "video"), ["h264"]);
     assert_eq!(support::codecs(&target, "audio"), ["aac"]);
 
