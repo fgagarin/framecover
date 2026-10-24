@@ -1090,12 +1090,20 @@ longer and change its video codec.\n\nReason: {reason}"
             return;
         }
         self.state.last_save_duration = Some(result.elapsed_ms as f64 / 1000.0);
+        // On success the writer's message is an informational note, e.g. that
+        // WebM can't hold cover art; show it with the save result.
+        let note = result.error_message.as_deref().filter(|n| !n.is_empty());
         if let Some(output) = &result.output_path {
             // Keep editing the source so repeated saves do not prepend previews.
             self.state.thumbnail = self.state.current_frame.clone();
             self.state.save_tooltip = format!("Saved copy: {}", output.display());
+            if let Some(note) = note {
+                self.state.save_tooltip.push('\n');
+                self.state.save_tooltip.push_str(note);
+            }
             return;
         }
+        self.state.save_tooltip = note.unwrap_or(SAVE_TOOLTIP).to_owned();
         let (Some(video), Some(frame)) =
             (self.state.video.clone(), self.state.current_frame.clone())
         else {
@@ -1624,6 +1632,34 @@ mod tests {
         assert!(h.s().save_tooltip.contains("video-thumbnail.mp4"));
         assert!(h.s().thumbnail.is_some());
         assert!(h.s().dialogs.is_empty(), "success is silent");
+    }
+
+    #[test]
+    fn success_note_is_shown_in_the_save_tooltip() {
+        let note = "WebM files can't hold cover art.";
+        let mut h = Harness::new();
+        selected(&mut h);
+        h.send(Event::SaveCopyClicked);
+        h.send(Event::SaveFinished(ApplyResult {
+            output_path: Some("/fake/video-thumbnail.webm".into()),
+            error_message: Some(note.into()),
+            ..ApplyResult::ok()
+        }));
+        assert!(h.s().save_tooltip.ends_with(note), "{}", h.s().save_tooltip);
+        assert!(h.s().dialogs.is_empty());
+
+        let mut h = Harness::new();
+        selected(&mut h);
+        h.send(Event::OverwriteClicked);
+        h.send(Event::OverwriteWarningAnswered {
+            choice: OverwriteChoice::Overwrite,
+            suppress: false,
+        });
+        h.send(Event::SaveFinished(ApplyResult {
+            error_message: Some(note.into()),
+            ..ApplyResult::ok()
+        }));
+        assert_eq!(h.s().save_tooltip, note);
     }
 
     #[test]
