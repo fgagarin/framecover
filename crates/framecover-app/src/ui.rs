@@ -33,6 +33,7 @@ use crate::filmstrip::{FilmJob, Filmstrip, TARGET_TILE_WIDTH, TILE_HEIGHT};
 use crate::frame_worker::FrameWorker;
 use crate::services::Services;
 use crate::settings::Settings;
+use crate::window_fit;
 use crate::workers::{self, LoadOutcome, panic_message, spawn_guarded};
 use crate::{AppWindow, DialogData, DialogKind, FilmTile};
 
@@ -164,6 +165,37 @@ fn report_from_details(details: String) -> ErrorReport {
 
 fn to_pixel_buffer(img: &RgbImage) -> SharedPixelBuffer<Rgb8Pixel> {
     SharedPixelBuffer::clone_from_slice(img.as_raw(), img.width(), img.height())
+}
+
+/// Physical rectangle where the window may be placed: the work area (without
+/// the taskbar) of the monitor under the window's centre on Windows, the
+/// whole current monitor elsewhere.
+fn screen_work_area(
+    window: &winit::window::Window,
+    position: (i32, i32),
+    size: (u32, u32),
+) -> Option<window_fit::Rect> {
+    let centre = (
+        position.0.saturating_add((size.0 / 2) as i32),
+        position.1.saturating_add((size.1 / 2) as i32),
+    );
+    #[cfg(windows)]
+    {
+        let _ = window;
+        window_fit::work_area(centre)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = centre;
+        let monitor = window.current_monitor()?;
+        let (origin, extent) = (monitor.position(), monitor.size());
+        Some(window_fit::Rect {
+            left: origin.x,
+            top: origin.y,
+            right: origin.x.saturating_add(extent.width as i32),
+            bottom: origin.y.saturating_add(extent.height as i32),
+        })
+    }
 }
 
 fn to_image(img: &RgbImage) -> Image {
@@ -482,12 +514,49 @@ impl App {
                 }
             }
             Effect::RevealInFolder(path) => self.services.desktop.reveal_in_file_manager(&path),
-            Effect::ResizeWindow(width, height) => {
-                let window = self.window.window();
-                if !window.is_maximized() && !window.is_fullscreen() {
-                    window.set_size(slint::LogicalSize::new(width, height));
-                }
+            Effect::ResizeWindow(width, height) => self.grow_window(width, height),
+        }
+    }
+
+    /// Resize the window to `width`x`height` logical pixels, shrinking and
+    /// moving it as needed so it stays inside its monitor's work area.
+    fn grow_window(&self, width: f32, height: f32) {
+        let window = self.window.window();
+        if window.is_maximized() || window.is_fullscreen() {
+            return;
+        }
+        let scale = window.scale_factor();
+        let desired = (
+            (width * scale).round() as u32,
+            (height * scale).round() as u32,
+        );
+        let placement = window
+            .with_winit_window(|w| {
+                let (outer, inner) = (w.outer_size(), w.inner_size());
+                let frame = (
+                    outer.width.saturating_sub(inner.width),
+                    outer.height.saturating_sub(inner.height),
+                );
+                let position = w.outer_position().ok()?;
+                let work =
+                    screen_work_area(w, (position.x, position.y), (outer.width, outer.height))?;
+                Some(window_fit::fit(
+                    desired,
+                    frame,
+                    (position.x, position.y),
+                    work,
+                ))
+            })
+            .flatten();
+        match placement {
+            Some(p) => {
+                window.set_size(slint::PhysicalSize::new(p.inner.0, p.inner.1));
+                window.set_position(slint::PhysicalPosition::new(
+                    p.outer_position.0,
+                    p.outer_position.1,
+                ));
             }
+            None => window.set_size(slint::LogicalSize::new(width, height)),
         }
     }
 

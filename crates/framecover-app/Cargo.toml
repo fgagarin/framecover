@@ -41,6 +41,7 @@ liblzma = "0.4.9"
 tempfile = "3.27.0"
 
 [target."cfg(windows)".dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Graphics_Gdi"] }
 winreg = "0.55.0"
 
 [build-dependencies]

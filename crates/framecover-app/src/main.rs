@@ -11,6 +11,7 @@ mod services;
 mod settings;
 mod timeline;
 mod ui;
+mod window_fit;
 mod workers;
 
 slint::include_modules!();
