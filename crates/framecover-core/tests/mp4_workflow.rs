@@ -69,6 +69,20 @@ fn copy_save_preserves_original_and_reuses_without_duration_growth() {
 }
 
 #[test]
+fn apostrophe_in_path_keeps_concat_fast_path() {
+    let root = tempfile::tempdir().unwrap();
+    let dir = root.path().join("it's here");
+    std::fs::create_dir(&dir).unwrap();
+    let target = common::sample_video(&dir);
+    let video = support::load(&target);
+    let frame = support::extract_frame(&target, 1000);
+    let result = FormatDispatchThumbnailWriter.write(&video, &frame, Some(1000), None);
+    assert!(result.success, "{:?}", result.error_message);
+    // A non-zero shift proves the concat path ran instead of the re-encode fallback.
+    assert!(result.duration_shift_ms > 0);
+}
+
+#[test]
 fn mp4_full_pipeline_success() {
     let dir = tempfile::tempdir().unwrap();
     let target = common::sample_video(dir.path());

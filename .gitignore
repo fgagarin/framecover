@@ -81,3 +81,6 @@ Thumbs.db
 /target/
 # Downloaded FFmpeg binaries (xtask fetch-ffmpeg)
 /vendor/
+
+# Claude Code agent worktrees
+/.claude/worktrees/

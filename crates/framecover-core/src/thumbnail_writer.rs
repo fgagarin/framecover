@@ -433,6 +433,10 @@ fn format_g(x: f64, precision: usize) -> String {
 }
 
 /// Quote a path for an FFmpeg concat demuxer manifest (`Path.as_posix()`).
+///
+/// Backslashes are literal inside ffmpeg's single quotes, so an apostrophe
+/// closes the quote, is escaped, and reopens it (`'it'\''s'`). The Python
+/// version's `\'` broke the fast path for such paths.
 fn concat_quote(path: &Path) -> String {
     let text = path.to_string_lossy();
     let posix = if cfg!(windows) {
@@ -440,7 +444,7 @@ fn concat_quote(path: &Path) -> String {
     } else {
         text.into_owned()
     };
-    format!("'{}'", posix.replace('\'', "\\'"))
+    format!("'{}'", posix.replace('\'', r"'\''"))
 }
 
 /// `tempfile.mkstemp(dir=dir, prefix=prefix, suffix=suffix)`, deleted on drop.
@@ -1096,7 +1100,7 @@ mod tests {
     #[test]
     fn concat_quote_escapes() {
         let quoted = concat_quote(Path::new("/tmp/it's.mp4"));
-        assert_eq!(quoted, "'/tmp/it\\'s.mp4'");
+        assert_eq!(quoted, r"'/tmp/it'\''s.mp4'");
         if cfg!(windows) {
             assert_eq!(concat_quote(Path::new(r"C:\a\b.mp4")), "'C:/a/b.mp4'");
         }
