@@ -45,14 +45,33 @@ pub fn video_with_thumb(dir: &Path) -> PathBuf {
     generate_video(&base, 5, 320, 240, H264_AAC);
     let cover = dir.join("cover.jpg");
     ffmpeg::ffmpeg([
-        "-y", "-f", "lavfi", "-i", "color=c=blue:size=320x240:rate=1:duration=1",
-        "-frames:v", "1", "-q:v", "2", cover.to_str().unwrap(),
+        "-y",
+        "-f",
+        "lavfi",
+        "-i",
+        "color=c=blue:size=320x240:rate=1:duration=1",
+        "-frames:v",
+        "1",
+        "-q:v",
+        "2",
+        cover.to_str().unwrap(),
     ])
     .expect("cover");
     let out = dir.join("with_thumb.mp4");
     ffmpeg::ffmpeg([
-        "-y", "-i", base.to_str().unwrap(), "-i", cover.to_str().unwrap(),
-        "-map", "0", "-map", "1", "-c", "copy", "-disposition:v:1", "attached_pic",
+        "-y",
+        "-i",
+        base.to_str().unwrap(),
+        "-i",
+        cover.to_str().unwrap(),
+        "-map",
+        "0",
+        "-map",
+        "1",
+        "-c",
+        "copy",
+        "-disposition:v:1",
+        "attached_pic",
         out.to_str().unwrap(),
     ])
     .expect("attach cover");

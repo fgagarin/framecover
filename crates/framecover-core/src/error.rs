@@ -18,7 +18,11 @@ pub enum Error {
     NoVideoStream(PathBuf),
 
     #[error("Failed to extract frame at {offset_ms} ms from '{}': {cause}", path.display())]
-    Extraction { path: PathBuf, offset_ms: u64, cause: String },
+    Extraction {
+        path: PathBuf,
+        offset_ms: u64,
+        cause: String,
+    },
 
     #[error("{0}")]
     Conversion(String),

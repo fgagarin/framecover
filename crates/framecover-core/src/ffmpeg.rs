@@ -6,7 +6,8 @@
 //! 2. a path registered with [`set_bundled_dir`] (the app extracts embedded
 //!    binaries there on Windows);
 //! 3. next to the running executable, then `../Resources` (macOS `.app`);
-//! 4. `vendor/ffmpeg` in the source tree (development builds);
+//! 4. `vendor/ffmpeg/<platform>` (from `cargo xtask fetch-ffmpeg`), then
+//!    `vendor/ffmpeg`, in the source tree (development builds);
 //! 5. `PATH`.
 
 use std::ffi::OsStr;
@@ -77,11 +78,11 @@ pub fn locate(tool: Tool) -> Result<PathBuf> {
         candidates.push(dir.join("ffmpeg").join(&name));
         candidates.push(dir.join("../Resources").join(&name));
     }
-    candidates.push(
-        Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../vendor/ffmpeg")
-            .join(&name),
-    );
+    let vendor = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../vendor/ffmpeg");
+    if let Some(platform) = vendor_platform() {
+        candidates.push(vendor.join(platform).join(&name));
+    }
+    candidates.push(vendor.join(&name));
     if let Some(found) = candidates.into_iter().find(|p| p.is_file()) {
         return Ok(found);
     }
@@ -91,6 +92,18 @@ pub fn locate(tool: Tool) -> Result<PathBuf> {
             tool.env_vars()[0]
         ))
     })
+}
+
+/// `vendor/ffmpeg/<platform>` directory name used by `cargo xtask fetch-ffmpeg`.
+fn vendor_platform() -> Option<&'static str> {
+    match (std::env::consts::OS, std::env::consts::ARCH) {
+        ("windows", "x86_64") => Some("windows-x64"),
+        ("linux", "x86_64") => Some("linux-x64"),
+        ("linux", "aarch64") => Some("linux-arm64"),
+        ("macos", "aarch64") => Some("macos-arm64"),
+        ("macos", "x86_64") => Some("macos-x64"),
+        _ => None,
+    }
 }
 
 fn search_path(name: &OsStr) -> Option<PathBuf> {

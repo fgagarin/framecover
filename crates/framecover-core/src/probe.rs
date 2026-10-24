@@ -39,7 +39,11 @@ impl std::fmt::Display for Rational {
             n = -n;
             d = -d;
         }
-        if d == 1 { write!(f, "{n}") } else { write!(f, "{n}/{d}") }
+        if d == 1 {
+            write!(f, "{n}")
+        } else {
+            write!(f, "{n}/{d}")
+        }
     }
 }
 
@@ -176,7 +180,9 @@ impl ProbeInfo {
     }
 
     pub fn has_attached_pic(&self) -> bool {
-        self.streams.iter().any(|s| s.is_video() && s.is_attached_pic())
+        self.streams
+            .iter()
+            .any(|s| s.is_video() && s.is_attached_pic())
     }
 }
 
@@ -184,8 +190,16 @@ impl ProbeInfo {
 /// parsed as media at all.
 pub fn probe(path: &Path) -> Result<ProbeInfo> {
     let mut cmd = ffmpeg::command(Tool::Ffprobe)?;
-    cmd.args(["-v", "error", "-of", "json", "-show_format", "-show_streams", "-i"])
-        .arg(path);
+    cmd.args([
+        "-v",
+        "error",
+        "-of",
+        "json",
+        "-show_format",
+        "-show_streams",
+        "-i",
+    ])
+    .arg(path);
     let out = ffmpeg::run(&mut cmd).map_err(|e| match e {
         Error::Ffmpeg { stderr, .. } => {
             Error::Other(format!("Could not read '{}': {stderr}", path.display()))
@@ -206,10 +220,16 @@ mod tests {
 
     #[test]
     fn rational_parse_and_display() {
-        assert_eq!(Rational::parse("1/90000"), Some(Rational { num: 1, den: 90000 }));
+        assert_eq!(
+            Rational::parse("1/90000"),
+            Some(Rational { num: 1, den: 90000 })
+        );
         assert_eq!(Rational::parse("0/0"), None);
         assert_eq!(Rational::parse("60/2").unwrap().to_string(), "30");
-        assert_eq!(Rational::parse("30000/1001").unwrap().to_string(), "30000/1001");
+        assert_eq!(
+            Rational::parse("30000/1001").unwrap().to_string(),
+            "30000/1001"
+        );
         assert_eq!(Rational::parse("25").unwrap().to_string(), "25");
     }
 

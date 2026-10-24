@@ -95,7 +95,10 @@ pub struct ApplyResult {
 
 impl ApplyResult {
     pub fn ok() -> Self {
-        Self { success: true, ..Self::default() }
+        Self {
+            success: true,
+            ..Self::default()
+        }
     }
 
     pub fn failure(code: ApplyError, message: impl Into<String>) -> Self {
@@ -138,7 +141,10 @@ pub struct Stages<'a> {
 
 impl<'a> Stages<'a> {
     pub fn new(callback: Option<ProgressFn<'a>>) -> Self {
-        Self { callback, current: None }
+        Self {
+            callback,
+            current: None,
+        }
     }
 
     /// Finish the running stage (if any) and start `name`.
