@@ -35,7 +35,7 @@ pub fn load(path: &Path) -> VideoFile {
         .map(|s| (s * 1000.0) as u64)
         .unwrap_or(0);
     let frame_step_ms = stream
-        .average_rate()
+        .effective_rate()
         .or_else(|| stream.base_rate())
         .map(|r| ((1000.0 / r.to_f64()).round() as u64).max(1))
         .unwrap_or(40);

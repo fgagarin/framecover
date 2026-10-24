@@ -3,7 +3,9 @@
 //! * MP4 (`.mp4`): concat fast path — encode the selected frame as a one-frame
 //!   clip matching the source codec parameters and prepend it with the concat
 //!   demuxer and stream copy (no source re-encode). A previously inserted
-//!   preview is stripped first so repeated saves keep the duration. Falls back
+//!   preview is stripped first so repeated saves keep the duration. The
+//!   output's leading DTS are repaired so B-frame delay (or squashed DTS from
+//!   earlier versions) cannot skew the frame rate. Falls back
 //!   to a full H.264 re-encode that overlays the frame on frame 0.
 //! * MOV: always the full re-encode path.
 //! * MKV: cover attached with `-attach`.
@@ -180,12 +182,20 @@ struct ConcatParams {
     width: u32,
     height: u32,
     profile: &'static str,
-    /// `str()` of PyAV 19's `AVRational` average frame rate: always `num/den`
-    /// (e.g. `25/1`), unlike `fractions.Fraction`/[`Rational`]'s Display.
+    /// The stream's effective frame rate ([`Stream::effective_rate`]) as
+    /// `num/den` (e.g. `25/1`) like `str()` of PyAV 19's `AVRational`, unlike
+    /// `fractions.Fraction`/[`Rational`]'s Display.
     frame_rate: String,
     /// Seconds per frame, `1 / float(frame_rate)`.
     frame_duration: f64,
     video_track_timescale: i64,
+}
+
+impl ConcatParams {
+    /// One frame in `video_track_timescale` ticks.
+    fn frame_ticks(&self) -> i64 {
+        (self.frame_duration * self.video_track_timescale as f64).round() as i64
+    }
 }
 
 /// ffprobe reports unnamed profiles as `unknown` or a number; PyAV as `None`.
@@ -305,7 +315,7 @@ fn concat_decision(
     let raw_profile = named_profile(stream);
     let profile = raw_profile.unwrap_or("").to_lowercase();
     let is_av1 = codec_name == "av1";
-    let frame_rate = stream.average_rate();
+    let frame_rate = stream.effective_rate();
     let mut reasons: Vec<String> = Vec::new();
     if codec_name != "h264" && !is_av1 {
         let long_name = decoder_long_name(codec_name)
@@ -845,6 +855,171 @@ fn preview_matches(preview: &ProbeInfo, params: &ConcatParams) -> (bool, String)
     (ok, detail)
 }
 
+// ---------------------------------------------------------------------------
+// Leading-DTS repair for the concat output
+// ---------------------------------------------------------------------------
+//
+// The preview clip's only packet has `pts = dts = 0`. A source with B-frames
+// starts with negative DTS (x264 default: two frames of reorder delay), which
+// the concat demuxer shifts by one frame — still below the preview's 0. The
+// mp4 muxer then "fixes" the non-monotonic DTS by squashing the first packets
+// to 1-tick durations, which shortens the track by the reorder delay and skews
+// `avg_frame_rate` (e.g. `6275/249` instead of `25/1`). Files written that way
+// by earlier versions carry the squashed DTS, which a re-save copies along.
+//
+// Fix: inspect the first packets exactly as the final ffmpeg run will see them
+// (ffprobe on the concat manifest) and, when needed, rewrite the leading DTS
+// with `setts` so they step back one frame at a time from the first packet that
+// is still regular. PTS (and so presentation order and the preview at t=0) are
+// untouched. `pts=PTS` must be explicit: `setts` otherwise sets PTS from its
+// `ts` expression (default `TS`) too.
+
+/// Timestamps of one demuxed packet, in the stream time base.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Deserialize)]
+struct PacketTs {
+    pts: Option<i64>,
+    dts: Option<i64>,
+    duration: Option<i64>,
+}
+
+/// Leading packets of the concat output inspected for the DTS repair.
+const DTS_HEAD_PACKETS: usize = 32;
+
+/// First [`DTS_HEAD_PACKETS`] video packets the concat demuxer produces.
+fn concat_head(manifest: &Path) -> Result<Vec<PacketTs>> {
+    #[derive(serde::Deserialize)]
+    struct Packets {
+        #[serde(default)]
+        packets: Vec<PacketTs>,
+    }
+    let mut cmd = crate::ffmpeg::command(crate::ffmpeg::Tool::Ffprobe)?;
+    cmd.args(["-v", "error", "-f", "concat", "-safe", "0"])
+        .args(["-select_streams", "v:0", "-read_intervals"])
+        .arg(format!("%+#{DTS_HEAD_PACKETS}"))
+        .args([
+            "-show_entries",
+            "packet=pts,dts,duration",
+            "-of",
+            "json",
+            "-i",
+        ])
+        .arg(manifest);
+    let out = crate::ffmpeg::run(&mut cmd)?;
+    let parsed: Packets = serde_json::from_slice(&out.stdout)
+        .map_err(|e| Error::Other(format!("invalid ffprobe packet output: {e}")))?;
+    Ok(parsed.packets)
+}
+
+/// Rewrite of the first `count` packets' DTS to
+/// `first packet's PTS + offset - (count - N) * step`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct DtsRepair {
+    count: usize,
+    /// DTS of packet `count` relative to the PTS of packet 0.
+    offset: i64,
+    step: i64,
+}
+
+impl DtsRepair {
+    fn setts(&self) -> String {
+        let Self {
+            count,
+            offset,
+            step,
+        } = *self;
+        format!("setts=pts=PTS:dts='if(lt(N,{count}),STARTPTS+({offset})-({count}-N)*{step},DTS)'")
+    }
+}
+
+/// Plan the leading-DTS repair for `head` (packet 0 is the preview), with
+/// `step` ticks per frame. `Ok(None)`: DTS already advance normally.
+///
+/// A packet is irregular when its DTS advances less than half a frame over the
+/// previous one (non-monotonic or muxer-squashed). Everything up to the last
+/// irregular packet is rewritten to whole-frame steps ending one frame before
+/// the first regular packet.
+fn plan_dts_repair(head: &[PacketTs], step: i64) -> std::result::Result<Option<DtsRepair>, String> {
+    if step <= 0 {
+        return Err(format!("invalid frame step {step}"));
+    }
+    let dts: Vec<i64> = head
+        .iter()
+        .map(|p| p.dts)
+        .collect::<Option<_>>()
+        .ok_or("a leading packet has no DTS")?;
+    let Some(start_pts) = head.first().and_then(|p| p.pts) else {
+        return Err("the preview packet has no PTS".to_owned());
+    };
+    let Some(last_irregular) = (1..dts.len())
+        .rev()
+        .find(|&i| 2 * (dts[i] - dts[i - 1]) < step)
+    else {
+        return Ok(None);
+    };
+    let count = last_irregular + 1;
+    if count >= dts.len() {
+        return Err(format!(
+            "DTS are irregular throughout the first {} packets",
+            dts.len()
+        ));
+    }
+    let repair = DtsRepair {
+        count,
+        offset: dts[count] - start_pts,
+        step,
+    };
+    for (n, packet) in head.iter().enumerate().take(count) {
+        let new_dts = start_pts + repair.offset - (count - n) as i64 * step;
+        if let Some(pts) = packet.pts
+            && new_dts > pts
+        {
+            return Err(format!(
+                "repaired DTS {new_dts} of packet {n} would follow its PTS {pts}"
+            ));
+        }
+    }
+    Ok(Some(repair))
+}
+
+/// `-bsf:v:0 setts=…` arguments repairing the concat output's leading DTS, or
+/// none when they are already regular (or cannot be repaired: the muxer then
+/// squashes them as before, which still plays).
+fn dts_repair_args(manifest: &Path, params: &ConcatParams, video_path: &Path) -> Vec<OsString> {
+    let head = match concat_head(manifest) {
+        Ok(head) => head,
+        Err(err) => {
+            log::warn!(
+                "could not inspect concat timestamps for '{}': {err}",
+                video_path.display()
+            );
+            return Vec::new();
+        }
+    };
+    let step = head
+        .first()
+        .and_then(|p| p.duration)
+        .filter(|d| *d > 0)
+        .unwrap_or_else(|| params.frame_ticks());
+    match plan_dts_repair(&head, step) {
+        Ok(Some(repair)) => {
+            debug!(
+                "repairing the first {} DTS of '{}' ({repair:?})",
+                repair.count,
+                video_path.display()
+            );
+            args!["-bsf:v:0", repair.setts()]
+        }
+        Ok(None) => Vec::new(),
+        Err(reason) => {
+            log::warn!(
+                "leading DTS of '{}' left unrepaired: {reason}",
+                video_path.display()
+            );
+            Vec::new()
+        }
+    }
+}
+
 /// Prepend a matching frame, optionally replacing the existing preview.
 /// Returns `false` (no output written) when the encoded preview does not
 /// match the source parameters.
@@ -957,6 +1132,7 @@ fn write_concat(
         concat_quote(concat_source)
     );
     std::fs::write(&temps.concat, manifest)?;
+    let dts_repair = dts_repair_args(&temps.concat, params, video_path);
 
     stages.start("Copying video streams");
     let mut copy_args = args!["-y", "-f", "concat", "-safe", "0", "-i", temps.concat];
@@ -982,6 +1158,9 @@ fn write_concat(
         "1",
         "-c",
         "copy",
+    ]);
+    copy_args.extend(dts_repair);
+    copy_args.extend(args![
         "-disposition:v:1",
         "attached_pic",
         "-f",
@@ -1199,6 +1378,66 @@ mod tests {
         assert_eq!(params.codec, ConcatCodec::Av1);
         assert_eq!(params.frame_rate, "30000/1001");
         assert_eq!(params.video_track_timescale, 90000);
+    }
+
+    fn head(ts: &[(i64, i64)]) -> Vec<PacketTs> {
+        ts.iter()
+            .map(|&(pts, dts)| PacketTs {
+                pts: Some(pts),
+                dts: Some(dts),
+                duration: Some(512),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn dts_repair_for_b_frame_source() {
+        // Preview (0/0), then an x264 source shifted by one frame.
+        let h = head(&[(0, 0), (512, -512), (1536, 0), (1024, 512), (3584, 1024)]);
+        let repair = plan_dts_repair(&h, 512).unwrap().unwrap();
+        assert_eq!(
+            repair,
+            DtsRepair {
+                count: 2,
+                offset: 0,
+                step: 512
+            }
+        );
+        assert_eq!(
+            repair.setts(),
+            "setts=pts=PTS:dts='if(lt(N,2),STARTPTS+(0)-(2-N)*512,DTS)'"
+        );
+    }
+
+    #[test]
+    fn dts_repair_for_squashed_resave() {
+        // A file saved by earlier versions, its preview stripped: DTS 1, 2.
+        let h = head(&[(0, 0), (512, 1), (1536, 2), (1024, 512), (3584, 1024)]);
+        let repair = plan_dts_repair(&h, 512).unwrap().unwrap();
+        assert_eq!((repair.count, repair.offset), (3, 512));
+        // New DTS: -1024, -512, 0 — all at or before their PTS.
+    }
+
+    #[test]
+    fn dts_repair_not_needed_without_reordering() {
+        let h = head(&[(0, 0), (512, 512), (1024, 1024), (1536, 1536)]);
+        assert_eq!(plan_dts_repair(&h, 512), Ok(None));
+        // Tiny steps (time base = 1/fps) still count as regular.
+        let h = head(&[(0, 0), (1, 1), (2, 2)]);
+        assert_eq!(plan_dts_repair(&h, 1), Ok(None));
+    }
+
+    #[test]
+    fn dts_repair_refuses_impossible_plans() {
+        // DTS would have to follow PTS.
+        let h = head(&[(0, 0), (0, 0), (10_000, 10_000)]);
+        assert!(plan_dts_repair(&h, 512).is_err());
+        // Never regular within the window.
+        let h = head(&[(0, 0), (512, 1), (1024, 2)]);
+        assert!(plan_dts_repair(&h, 512).is_err());
+        let mut h = head(&[(0, 0), (512, 512)]);
+        h[1].dts = None;
+        assert!(plan_dts_repair(&h, 512).is_err());
     }
 
     #[test]

@@ -198,3 +198,15 @@ goldens. Decide deliberately whether the port matches them or fixes them.
    - MP4/MOV use the video *stream* duration (`stream.duration * time_base`).
    - MKV/WebM/FLV have no stream duration and fall back to the container
      duration (5023, 5008 and 5080 ms for 5 s fixtures).
+
+## Intentional deviations of the Rust port
+
+Some of the behaviours above are bugs that were fixed after the port reached
+parity. The golden files are **not** regenerated: `tests/golden.rs` patches
+exactly the expected values each fix changes (`apply_intentional_deviations`,
+with a comment per fix) and compares everything else against Python.
+
+- Behaviour 1 (frame rate drift): the concat output's leading DTS are
+  repaired with `-bsf:v:0 setts=…`, so outputs keep the source frame rate and
+  duration + one frame. The loader also reads already-drifted files with
+  `r_frame_rate` (see `Stream::effective_rate`).

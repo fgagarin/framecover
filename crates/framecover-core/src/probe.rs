@@ -47,6 +47,20 @@ impl std::fmt::Display for Rational {
     }
 }
 
+/// Maximum relative difference between `avg_frame_rate` and `r_frame_rate`
+/// treated as timestamp drift of a constant-rate stream (5%: two squashed
+/// frames in a clip of about 40 frames or more).
+pub const RATE_DRIFT_TOLERANCE: f64 = 0.05;
+
+/// `average` differs from `base`, but by no more than the drift tolerance.
+fn rate_drifted(average: Rational, base: Rational) -> bool {
+    let (a, b) = (average.to_f64(), base.to_f64());
+    a > 0.0
+        && b > 0.0
+        && average.num as i128 * base.den as i128 != base.num as i128 * average.den as i128
+        && ((a - b) / b).abs() <= RATE_DRIFT_TOLERANCE
+}
+
 fn gcd(a: u64, b: u64) -> u64 {
     if b == 0 { a } else { gcd(b, a % b) }
 }
@@ -87,6 +101,8 @@ pub struct Stream {
     #[serde(default)]
     duration_ts: Option<i64>,
     #[serde(default)]
+    nb_frames: Option<String>,
+    #[serde(default)]
     pub disposition: Disposition,
     #[serde(default)]
     pub tags: HashMap<String, String>,
@@ -124,6 +140,34 @@ impl Stream {
             .as_deref()
             .and_then(Rational::parse)
             .filter(|r| r.num > 0)
+    }
+
+    /// Frame rate to use for frame steps and for encoding a matching preview.
+    ///
+    /// Normally `avg_frame_rate`. When `r_frame_rate` is also known and the
+    /// two differ by at most [`RATE_DRIFT_TOLERANCE`] (relative), prefer
+    /// `r_frame_rate`: a small deviation means a constant-rate stream whose
+    /// average was skewed by a few odd timestamps — typically MP4s saved by
+    /// earlier FrameCover versions, whose leading DTS were squashed by the
+    /// muxer (`6275/249` or `1575/62` instead of `25/1`). Larger differences
+    /// (true VFR, field rates, `90000/1` base rates) keep the average.
+    pub fn effective_rate(&self) -> Option<Rational> {
+        match (self.average_rate(), self.base_rate()) {
+            (Some(a), Some(b)) if rate_drifted(a, b) => Some(b),
+            (Some(a), _) => Some(a),
+            (None, b) => b,
+        }
+    }
+
+    /// Whether [`effective_rate`](Self::effective_rate) replaced a drifted
+    /// `avg_frame_rate` with `r_frame_rate`.
+    pub fn has_rate_drift(&self) -> bool {
+        matches!((self.average_rate(), self.base_rate()), (Some(a), Some(b)) if rate_drifted(a, b))
+    }
+
+    /// Number of frames (`nb_frames`), if the container reports it.
+    pub fn nb_frames(&self) -> Option<u64> {
+        self.nb_frames.as_deref()?.trim().parse().ok()
     }
 
     /// Stream duration in `time_base` units (`duration_ts`), if reported.
@@ -257,5 +301,38 @@ mod tests {
         assert_eq!(info.streams[1].average_rate(), None);
         assert_eq!(info.streams[2].tag("filename"), Some("cover.jpg"));
         assert_eq!(info.format.duration_secs(), Some(2.023));
+    }
+
+    fn rates(avg: &str, r: &str) -> Stream {
+        let json = format!(
+            r#"{{"streams": [{{"index": 0, "codec_type": "video", "avg_frame_rate": "{avg}",
+                "r_frame_rate": "{r}", "nb_frames": "126"}}], "format": {{"format_name": "mp4"}}}}"#
+        );
+        parse(json.as_bytes()).unwrap().streams.remove(0)
+    }
+
+    fn effective(avg: &str, r: &str) -> String {
+        rates(avg, r).effective_rate().unwrap().to_string()
+    }
+
+    #[test]
+    fn effective_rate_corrects_small_drift_only() {
+        let s = rates("25/1", "25/1");
+        assert_eq!(effective("25/1", "25/1"), "25");
+        assert!(!s.has_rate_drift());
+        assert_eq!(s.nb_frames(), Some(126));
+        // Squashed-DTS outputs of earlier versions (both drift values seen).
+        for drifted in ["6275/249", "1575/62"] {
+            assert_eq!(effective(drifted, "25/1"), "25");
+            assert!(rates(drifted, "25/1").has_rate_drift());
+        }
+        // Same value, different spelling: not drift.
+        assert!(!rates("50/2", "25/1").has_rate_drift());
+        // Large deviations are real (field rate, VFR with a timescale base rate).
+        assert_eq!(effective("25/1", "50/1"), "25");
+        assert_eq!(effective("2997/100", "90000/1"), "2997/100");
+        // Missing average: base rate.
+        assert_eq!(effective("0/0", "24/1"), "24");
+        assert!(!rates("0/0", "24/1").has_rate_drift());
     }
 }
