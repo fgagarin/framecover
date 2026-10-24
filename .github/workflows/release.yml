@@ -11,6 +11,9 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
   prepare:
     name: Validate tag and generate changelog
@@ -19,15 +22,15 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
         with:
-          python-version: "3.13"
-      - uses: astral-sh/setup-uv@v6
-      - run: uv sync --frozen --extra dev
+          tool: git-cliff
       - name: Validate versions and generate release notes
         env:
           RELEASE_TAG: ${{ github.ref_name }}
-        run: uv run --frozen python scripts/release.py notes --tag "$RELEASE_TAG"
+        run: cargo xtask release notes "$RELEASE_TAG"
       - uses: actions/upload-artifact@v7
         with:
           name: release-notes
@@ -50,15 +53,21 @@ jobs:
             platform: windows
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          python-version: "3.13"
-      - uses: astral-sh/setup-uv@v6
-      - run: uv sync --frozen --extra dev
-      - name: Build native distribution
-        run: uv run --frozen pyinstaller pyinstaller.spec --distpath dist --workpath build --noconfirm
-      - name: Package distribution
-        run: uv run --frozen python scripts/release.py package --platform ${{ matrix.platform }}
+          targets: ${{ matrix.platform == 'macos' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+      - name: Install Slint build dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends \
+            libfontconfig1-dev libxkbcommon-dev libxkbcommon-x11-dev \
+            libwayland-dev libx11-xcb-dev libxcb-shape0-dev libxcb-xfixes0-dev
+      # No build cache here: release binaries are always built from scratch.
+      - name: Fetch pinned FFmpeg
+        run: cargo xtask fetch-ffmpeg
+      - name: Build and package native distribution
+        run: cargo xtask package ${{ matrix.platform }}
       - uses: actions/upload-artifact@v7
         with:
           name: release-${{ matrix.platform }}
