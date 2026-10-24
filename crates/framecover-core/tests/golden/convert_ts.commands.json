@@ -1,0 +1,29 @@
+{
+  "case": "convert_ts",
+  "commands": [
+    {
+      "argv": [
+        "<FFMPEG>",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-nostdin",
+        "-y",
+        "-i",
+        "<WORK>/sample.ts",
+        "-map",
+        "0:V:0",
+        "-map",
+        "0:a?",
+        "-map_chapters",
+        "0",
+        "-c",
+        "copy",
+        "-movflags",
+        "+faststart",
+        "<WORK>/.sample-converted-XXXXXXXX.mp4"
+      ],
+      "returncode": 0
+    }
+  ]
+}

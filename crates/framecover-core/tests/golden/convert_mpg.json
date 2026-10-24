@@ -1,0 +1,140 @@
+{
+  "case": "convert_mpg",
+  "description": "MPEG-PS MPEG-2/MP2 -> MP4: remux succeeds but is concat-ineligible, so transcoded with libx264.",
+  "fixture": {
+    "file_name": "sample.mpg",
+    "probe": {
+      "format_name": "mpeg",
+      "duration_ms": 5016,
+      "nb_streams": 2,
+      "major_brand": null,
+      "compatible_brands": null,
+      "streams": [
+        {
+          "index": 0,
+          "codec_type": "video",
+          "codec_name": "mpeg2video",
+          "profile": "Main",
+          "pix_fmt": "yuv420p",
+          "width": 320,
+          "height": 240,
+          "time_base": "1/90000",
+          "avg_frame_rate": "25/1",
+          "sample_rate": null,
+          "channels": null,
+          "nb_frames": null,
+          "start_time_ms": 540,
+          "duration_ms": 5000,
+          "attached_pic": 0,
+          "tags_filename": null,
+          "tags_mimetype": null
+        },
+        {
+          "index": 1,
+          "codec_type": "audio",
+          "codec_name": "mp2",
+          "profile": null,
+          "pix_fmt": null,
+          "width": null,
+          "height": null,
+          "time_base": "1/90000",
+          "avg_frame_rate": "0/0",
+          "sample_rate": "44100",
+          "channels": 1,
+          "nb_frames": null,
+          "start_time_ms": 529,
+          "duration_ms": 5016,
+          "attached_pic": 0,
+          "tags_filename": null,
+          "tags_mimetype": null
+        }
+      ]
+    }
+  },
+  "convert": {
+    "input": "sample.mpg",
+    "destination": "sample-converted.mp4",
+    "returned_path": "<WORK>/sample-converted.mp4",
+    "error": null,
+    "progress_stages": [
+      "Remuxing to MP4 without re-encoding",
+      "Encoding MP4 with libx264 / AAC"
+    ],
+    "new_files_in_directory": [
+      "sample-converted.mp4"
+    ],
+    "output": {
+      "file_name": "sample-converted.mp4",
+      "probe": {
+        "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+        "duration_ms": 5015,
+        "nb_streams": 2,
+        "major_brand": "isom",
+        "compatible_brands": "isomiso2avc1mp41",
+        "streams": [
+          {
+            "index": 0,
+            "codec_type": "video",
+            "codec_name": "h264",
+            "profile": "High",
+            "pix_fmt": "yuv420p",
+            "width": 320,
+            "height": 240,
+            "time_base": "1/12800",
+            "avg_frame_rate": "25/1",
+            "sample_rate": null,
+            "channels": null,
+            "nb_frames": 125,
+            "start_time_ms": 0,
+            "duration_ms": 5000,
+            "attached_pic": 0,
+            "tags_filename": null,
+            "tags_mimetype": null
+          },
+          {
+            "index": 1,
+            "codec_type": "audio",
+            "codec_name": "aac",
+            "profile": "LC",
+            "pix_fmt": null,
+            "width": null,
+            "height": null,
+            "time_base": "1/44100",
+            "avg_frame_rate": "0/0",
+            "sample_rate": "44100",
+            "channels": 1,
+            "nb_frames": 217,
+            "start_time_ms": 0,
+            "duration_ms": 5015,
+            "attached_pic": 0,
+            "tags_filename": null,
+            "tags_mimetype": null
+          }
+        ]
+      },
+      "load": {
+        "path": "<WORK>/sample-converted.mp4",
+        "format": "mp4",
+        "duration_ms": 5000,
+        "width": 320,
+        "height": 240,
+        "frame_step_ms": 40,
+        "is_writable": true,
+        "has_existing_thumbnail": false,
+        "existing_thumbnail_size": null,
+        "thumbnail_frame_number": null,
+        "thumbnail_position_ms": null
+      },
+      "reencode_reason": null,
+      "mp4_tags": {
+        "frame_number": null,
+        "position_ms": null,
+        "covr": null,
+        "keys": [
+          "\u00a9too"
+        ]
+      }
+    },
+    "concat_ineligibility_reason": null
+  }
+}

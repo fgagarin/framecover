@@ -1,0 +1,17 @@
+{
+  "case": "save_avi",
+  "commands": [
+    {
+      "argv": [
+        "<FFMPEG>",
+        "-y",
+        "-i",
+        "<WORK>/.vt_XXXXXXXX.tmp",
+        "-c",
+        "copy",
+        "<WORK>/.vt_out_XXXXXXXX.avi"
+      ],
+      "returncode": 0
+    }
+  ]
+}

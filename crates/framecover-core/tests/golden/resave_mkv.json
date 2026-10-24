@@ -1,0 +1,300 @@
+{
+  "case": "resave_mkv",
+  "description": "Save MKV, then save again on the produced copy (ffmpeg default stream selection drops the previous cover; one new cover.jpg is attached).",
+  "fixture": {
+    "file_name": "sample.mkv",
+    "probe": {
+      "format_name": "matroska,webm",
+      "duration_ms": 5023,
+      "nb_streams": 2,
+      "major_brand": null,
+      "compatible_brands": null,
+      "streams": [
+        {
+          "index": 0,
+          "codec_type": "video",
+          "codec_name": "h264",
+          "profile": "High",
+          "pix_fmt": "yuv420p",
+          "width": 320,
+          "height": 240,
+          "time_base": "1/1000",
+          "avg_frame_rate": "25/1",
+          "sample_rate": null,
+          "channels": null,
+          "nb_frames": null,
+          "start_time_ms": 0,
+          "duration_ms": null,
+          "attached_pic": 0,
+          "tags_filename": null,
+          "tags_mimetype": null
+        },
+        {
+          "index": 1,
+          "codec_type": "audio",
+          "codec_name": "aac",
+          "profile": "LC",
+          "pix_fmt": null,
+          "width": null,
+          "height": null,
+          "time_base": "1/1000",
+          "avg_frame_rate": "0/0",
+          "sample_rate": "44100",
+          "channels": 1,
+          "nb_frames": null,
+          "start_time_ms": 0,
+          "duration_ms": null,
+          "attached_pic": 0,
+          "tags_filename": null,
+          "tags_mimetype": null
+        }
+      ]
+    },
+    "load": {
+      "path": "<WORK>/sample.mkv",
+      "format": "mkv",
+      "duration_ms": 5023,
+      "width": 320,
+      "height": 240,
+      "frame_step_ms": 40,
+      "is_writable": true,
+      "has_existing_thumbnail": false,
+      "existing_thumbnail_size": null,
+      "thumbnail_frame_number": null,
+      "thumbnail_position_ms": null
+    },
+    "reencode_reason": null
+  },
+  "first_save": {
+    "input": "sample.mkv",
+    "position_ms": 2000,
+    "extracted_frame_size": [
+      320,
+      240
+    ],
+    "destination": "sample-thumbnail.mkv",
+    "result": {
+      "success": true,
+      "error_code": null,
+      "error_message": null,
+      "duration_shift_ms": 0,
+      "output_path": "<WORK>/sample-thumbnail.mkv"
+    },
+    "new_files_in_directory": [
+      ".sample-thumbnail.mkv.video-thumbnailer.json",
+      "sample-thumbnail.mkv"
+    ],
+    "output": {
+      "file_name": "sample-thumbnail.mkv",
+      "probe": {
+        "format_name": "matroska,webm",
+        "duration_ms": 5038,
+        "nb_streams": 3,
+        "major_brand": null,
+        "compatible_brands": null,
+        "streams": [
+          {
+            "index": 0,
+            "codec_type": "video",
+            "codec_name": "h264",
+            "profile": "High",
+            "pix_fmt": "yuv420p",
+            "width": 320,
+            "height": 240,
+            "time_base": "1/1000",
+            "avg_frame_rate": "25/1",
+            "sample_rate": null,
+            "channels": null,
+            "nb_frames": null,
+            "start_time_ms": 0,
+            "duration_ms": null,
+            "attached_pic": 0,
+            "tags_filename": null,
+            "tags_mimetype": null
+          },
+          {
+            "index": 1,
+            "codec_type": "audio",
+            "codec_name": "aac",
+            "profile": "LC",
+            "pix_fmt": null,
+            "width": null,
+            "height": null,
+            "time_base": "1/1000",
+            "avg_frame_rate": "0/0",
+            "sample_rate": "44100",
+            "channels": 1,
+            "nb_frames": null,
+            "start_time_ms": 0,
+            "duration_ms": null,
+            "attached_pic": 0,
+            "tags_filename": null,
+            "tags_mimetype": null
+          },
+          {
+            "index": 2,
+            "codec_type": "video",
+            "codec_name": "mjpeg",
+            "profile": "Baseline",
+            "pix_fmt": "yuvj420p",
+            "width": 320,
+            "height": 240,
+            "time_base": "1/90000",
+            "avg_frame_rate": "0/0",
+            "sample_rate": null,
+            "channels": null,
+            "nb_frames": null,
+            "start_time_ms": 0,
+            "duration_ms": 5038,
+            "attached_pic": 1,
+            "tags_filename": "cover.jpg",
+            "tags_mimetype": "image/jpeg"
+          }
+        ]
+      },
+      "load": {
+        "path": "<WORK>/sample-thumbnail.mkv",
+        "format": "mkv",
+        "duration_ms": 5038,
+        "width": 320,
+        "height": 240,
+        "frame_step_ms": 40,
+        "is_writable": true,
+        "has_existing_thumbnail": true,
+        "existing_thumbnail_size": [
+          320,
+          240
+        ],
+        "thumbnail_frame_number": null,
+        "thumbnail_position_ms": null
+      },
+      "reencode_reason": null
+    },
+    "receipt": {
+      "file_name": ".sample-thumbnail.mkv.video-thumbnailer.json",
+      "keys": [
+        "output_sha256",
+        "source_sha256",
+        "version"
+      ],
+      "version": 1
+    },
+    "source_unchanged": true
+  },
+  "second_save": {
+    "input": "sample-thumbnail.mkv",
+    "position_ms": 3000,
+    "extracted_frame_size": [
+      320,
+      240
+    ],
+    "destination": "sample-thumbnail-thumbnail.mkv",
+    "result": {
+      "success": true,
+      "error_code": null,
+      "error_message": null,
+      "duration_shift_ms": 0,
+      "output_path": "<WORK>/sample-thumbnail-thumbnail.mkv"
+    },
+    "new_files_in_directory": [
+      ".sample-thumbnail-thumbnail.mkv.video-thumbnailer.json",
+      "sample-thumbnail-thumbnail.mkv"
+    ],
+    "output": {
+      "file_name": "sample-thumbnail-thumbnail.mkv",
+      "probe": {
+        "format_name": "matroska,webm",
+        "duration_ms": 5038,
+        "nb_streams": 3,
+        "major_brand": null,
+        "compatible_brands": null,
+        "streams": [
+          {
+            "index": 0,
+            "codec_type": "video",
+            "codec_name": "h264",
+            "profile": "High",
+            "pix_fmt": "yuv420p",
+            "width": 320,
+            "height": 240,
+            "time_base": "1/1000",
+            "avg_frame_rate": "25/1",
+            "sample_rate": null,
+            "channels": null,
+            "nb_frames": null,
+            "start_time_ms": 0,
+            "duration_ms": null,
+            "attached_pic": 0,
+            "tags_filename": null,
+            "tags_mimetype": null
+          },
+          {
+            "index": 1,
+            "codec_type": "audio",
+            "codec_name": "aac",
+            "profile": "LC",
+            "pix_fmt": null,
+            "width": null,
+            "height": null,
+            "time_base": "1/1000",
+            "avg_frame_rate": "0/0",
+            "sample_rate": "44100",
+            "channels": 1,
+            "nb_frames": null,
+            "start_time_ms": 0,
+            "duration_ms": null,
+            "attached_pic": 0,
+            "tags_filename": null,
+            "tags_mimetype": null
+          },
+          {
+            "index": 2,
+            "codec_type": "video",
+            "codec_name": "mjpeg",
+            "profile": "Baseline",
+            "pix_fmt": "yuvj420p",
+            "width": 320,
+            "height": 240,
+            "time_base": "1/90000",
+            "avg_frame_rate": "0/0",
+            "sample_rate": null,
+            "channels": null,
+            "nb_frames": null,
+            "start_time_ms": 0,
+            "duration_ms": 5038,
+            "attached_pic": 1,
+            "tags_filename": "cover.jpg",
+            "tags_mimetype": "image/jpeg"
+          }
+        ]
+      },
+      "load": {
+        "path": "<WORK>/sample-thumbnail-thumbnail.mkv",
+        "format": "mkv",
+        "duration_ms": 5038,
+        "width": 320,
+        "height": 240,
+        "frame_step_ms": 40,
+        "is_writable": true,
+        "has_existing_thumbnail": true,
+        "existing_thumbnail_size": [
+          320,
+          240
+        ],
+        "thumbnail_frame_number": null,
+        "thumbnail_position_ms": null
+      },
+      "reencode_reason": null
+    },
+    "receipt": {
+      "file_name": ".sample-thumbnail-thumbnail.mkv.video-thumbnailer.json",
+      "keys": [
+        "output_sha256",
+        "source_sha256",
+        "version"
+      ],
+      "version": 1
+    },
+    "source_unchanged": true
+  }
+}

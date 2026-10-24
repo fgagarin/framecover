@@ -1,0 +1,162 @@
+{
+  "case": "save_flv",
+  "description": "H.264/AAC FLV: no-op, copy published unchanged.",
+  "fixture": {
+    "file_name": "sample.flv",
+    "probe": {
+      "format_name": "flv",
+      "duration_ms": 5080,
+      "nb_streams": 2,
+      "major_brand": null,
+      "compatible_brands": null,
+      "streams": [
+        {
+          "index": 0,
+          "codec_type": "video",
+          "codec_name": "h264",
+          "profile": "High",
+          "pix_fmt": "yuv420p",
+          "width": 320,
+          "height": 240,
+          "time_base": "1/1000",
+          "avg_frame_rate": "25/1",
+          "sample_rate": null,
+          "channels": null,
+          "nb_frames": null,
+          "start_time_ms": 80,
+          "duration_ms": null,
+          "attached_pic": 0,
+          "tags_filename": null,
+          "tags_mimetype": null
+        },
+        {
+          "index": 1,
+          "codec_type": "audio",
+          "codec_name": "aac",
+          "profile": "LC",
+          "pix_fmt": null,
+          "width": null,
+          "height": null,
+          "time_base": "1/1000",
+          "avg_frame_rate": "0/0",
+          "sample_rate": "44100",
+          "channels": 1,
+          "nb_frames": null,
+          "start_time_ms": 57,
+          "duration_ms": null,
+          "attached_pic": 0,
+          "tags_filename": null,
+          "tags_mimetype": null
+        }
+      ]
+    },
+    "load": {
+      "path": "<WORK>/sample.flv",
+      "format": "flv",
+      "duration_ms": 5080,
+      "width": 320,
+      "height": 240,
+      "frame_step_ms": 40,
+      "is_writable": true,
+      "has_existing_thumbnail": false,
+      "existing_thumbnail_size": null,
+      "thumbnail_frame_number": null,
+      "thumbnail_position_ms": null
+    },
+    "reencode_reason": null
+  },
+  "save": {
+    "input": "sample.flv",
+    "position_ms": 2000,
+    "extracted_frame_size": [
+      320,
+      240
+    ],
+    "destination": "sample-thumbnail.flv",
+    "result": {
+      "success": true,
+      "error_code": null,
+      "error_message": "FLV does not support embedded cover art; Linux file manager icon updated via XDG cache",
+      "duration_shift_ms": 0,
+      "output_path": "<WORK>/sample-thumbnail.flv"
+    },
+    "new_files_in_directory": [
+      ".sample-thumbnail.flv.video-thumbnailer.json",
+      "sample-thumbnail.flv"
+    ],
+    "output": {
+      "file_name": "sample-thumbnail.flv",
+      "probe": {
+        "format_name": "flv",
+        "duration_ms": 5080,
+        "nb_streams": 2,
+        "major_brand": null,
+        "compatible_brands": null,
+        "streams": [
+          {
+            "index": 0,
+            "codec_type": "video",
+            "codec_name": "h264",
+            "profile": "High",
+            "pix_fmt": "yuv420p",
+            "width": 320,
+            "height": 240,
+            "time_base": "1/1000",
+            "avg_frame_rate": "25/1",
+            "sample_rate": null,
+            "channels": null,
+            "nb_frames": null,
+            "start_time_ms": 80,
+            "duration_ms": null,
+            "attached_pic": 0,
+            "tags_filename": null,
+            "tags_mimetype": null
+          },
+          {
+            "index": 1,
+            "codec_type": "audio",
+            "codec_name": "aac",
+            "profile": "LC",
+            "pix_fmt": null,
+            "width": null,
+            "height": null,
+            "time_base": "1/1000",
+            "avg_frame_rate": "0/0",
+            "sample_rate": "44100",
+            "channels": 1,
+            "nb_frames": null,
+            "start_time_ms": 57,
+            "duration_ms": null,
+            "attached_pic": 0,
+            "tags_filename": null,
+            "tags_mimetype": null
+          }
+        ]
+      },
+      "load": {
+        "path": "<WORK>/sample-thumbnail.flv",
+        "format": "flv",
+        "duration_ms": 5080,
+        "width": 320,
+        "height": 240,
+        "frame_step_ms": 40,
+        "is_writable": true,
+        "has_existing_thumbnail": false,
+        "existing_thumbnail_size": null,
+        "thumbnail_frame_number": null,
+        "thumbnail_position_ms": null
+      },
+      "reencode_reason": null
+    },
+    "receipt": {
+      "file_name": ".sample-thumbnail.flv.video-thumbnailer.json",
+      "keys": [
+        "output_sha256",
+        "source_sha256",
+        "version"
+      ],
+      "version": 1
+    },
+    "source_unchanged": true
+  }
+}
