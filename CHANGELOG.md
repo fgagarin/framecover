@@ -6,6 +6,53 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 <!-- insertion marker -->
+## [v0.2.0](https://github.com/fgagarin/framecover/releases/tag/v0.2.0) - 2026-10-25
+
+<small>[Compare with v0.1.0](https://github.com/fgagarin/framecover/compare/v0.1.0...v0.2.0)</small>
+
+### Features
+
+- 1 GiB frame cache for videos above 1080p ([758e953](https://github.com/fgagarin/framecover/commit/758e953cd9dc2b8324dcf50225357d6ec0a9c213) by Fedor Gagarin). Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+- persistent ffmpeg decoding session for smooth scrubbing ([c189285](https://github.com/fgagarin/framecover/commit/c189285131aab1f1c1ca0b96006a5bd63df206a3) by Fedor Gagarin). Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+- bring back the update status dot ([e9d3334](https://github.com/fgagarin/framecover/commit/e9d3334c80f514741c962a4129697b44ec8e4e2e) by Fedor Gagarin). Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+- align footer items and show update status as plain text ([326a408](https://github.com/fgagarin/framecover/commit/326a408c08007d9d602e0a31dae314076bd2320a) by Fedor Gagarin). Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+- make the project page link grey with hover highlight ([f070b0d](https://github.com/fgagarin/framecover/commit/f070b0d77a84b350ba14c49ff9caaa3412e35838) by Fedor Gagarin). Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+- live frame updates while scrubbing; simpler footer ([04d597f](https://github.com/fgagarin/framecover/commit/04d597f8a422b173938b1753149ffbe32bb47c99) by Fedor Gagarin). Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+- show the writer's success note in the save tooltip ([4aff5db](https://github.com/fgagarin/framecover/commit/4aff5db0665f4a6d4c10276318b3729a689bfe02) by Fedor Gagarin). Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+- embed compressed FFmpeg in the Windows executable ([fb3266a](https://github.com/fgagarin/framecover/commit/fb3266a38848b848f018dfdf6d6b9ac755da6f8a) by Fedor Gagarin). Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+- wire the GUI to the core services ([5b45546](https://github.com/fgagarin/framecover/commit/5b455469482ab89df8f52e10ea8c269161bbe148) by Fedor Gagarin). Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+- Slint GUI port ([21c8293](https://github.com/fgagarin/framecover/commit/21c82931fbca4955a7609dd2c3f22bf460c11eec) by Fedor Gagarin). Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+- platform integration, update checker, xtask and Rust CI ([e92d50d](https://github.com/fgagarin/framecover/commit/e92d50de41bb904a50037905f6052d2a2a5cd89f) by Fedor Gagarin). Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+- thumbnail writer, safe save-copy and MP4 converter ([73b53c6](https://github.com/fgagarin/framecover/commit/73b53c6c2e671214f0f8fbf7da965957f2ef3ba7) by Fedor Gagarin). Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+- ffprobe loader and ffmpeg frame extractor ([b447e14](https://github.com/fgagarin/framecover/commit/b447e1411ab387e25807f43a5d6f82fda3d14474) by Fedor Gagarin). Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
+### Bug Fixes
+
+- only define the Windows manifest when building on Windows ([b3cb21a](https://github.com/fgagarin/framecover/commit/b3cb21adf0ba26ec36b33d2d136154a9a67f08aa) by Fedor Gagarin). Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+- keep the window on screen when it grows after opening a video ([6a6e122](https://github.com/fgagarin/framecover/commit/6a6e122707dfd291589881a6763f49b7ffe705f7) by Fedor Gagarin). Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+- concat fast path for MP4s whose video is not the first track ([8cfb6cd](https://github.com/fgagarin/framecover/commit/8cfb6cd167cd9e2de58d0048494baae0d4ed934d) by Fedor Gagarin). Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+- give MOV the concat fast path and keep it QuickTime ([0cf53d2](https://github.com/fgagarin/framecover/commit/0cf53d2346a5195b8e16e37dc02f87d019f990ae) by Fedor Gagarin). Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+- insert the preview in the full re-encode instead of overwriting frame 0 ([5a17f07](https://github.com/fgagarin/framecover/commit/5a17f07bab8e8300115377e904747b6da60f88fe) by Fedor Gagarin). Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+- skip the converter's remux when it cannot be concat-compatible ([0f6bd5f](https://github.com/fgagarin/framecover/commit/0f6bd5fb7e53289195eebe008544c37aeab1ecb7) by Fedor Gagarin). Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+- accurate notes for containers without cover art ([61a1b88](https://github.com/fgagarin/framecover/commit/61a1b88617da2b514b341b7e579b8cb5550507ad) by Fedor Gagarin). Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+- keep all tracks when re-muxing MKV and AVI ([439093c](https://github.com/fgagarin/framecover/commit/439093c970d9dc510a0b881e3bf57f97642afdfd) by Fedor Gagarin). Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+- keep source frame rate after the concat fast path ([860d6ff](https://github.com/fgagarin/framecover/commit/860d6ff4f33a8ab87c2fa06314986e91f1479360) by Fedor Gagarin). Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+- encode cover JPEGs with 4:2:0 chroma like Pillow ([154d2c0](https://github.com/fgagarin/framecover/commit/154d2c0c7f99e997dcd366fe4c286939de24b39b) by Fedor Gagarin). Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+- quote apostrophes correctly in concat manifests ([3b2ebc3](https://github.com/fgagarin/framecover/commit/3b2ebc3d6279b0800e89d47bbdc5877893be4794) by Fedor Gagarin). Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
+### Code Refactoring
+
+- replace the Python implementation with the Rust port ([3369d51](https://github.com/fgagarin/framecover/commit/3369d5176390272e64c48a8bd3591dd02c758982) by Fedor Gagarin). Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
+### Build
+
+- render changelog dates in Asia/Tokyo like git-changelog did ([33e0c5c](https://github.com/fgagarin/framecover/commit/33e0c5cb5f678b40c4d64bfa3ea2cd09b56ac04b) by Fedor Gagarin). Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+- ship FFmpeg GPL notice and license text in release bundles ([299adf6](https://github.com/fgagarin/framecover/commit/299adf6ae8cf38a400a765e61f5e73a73b645e7a) by Fedor Gagarin). Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
+### Docs
+
+- rewrite README for the Rust version ([baaee47](https://github.com/fgagarin/framecover/commit/baaee47d147d6f4e93f1a1ee3aa020ea87810ce7) by Fedor Gagarin). Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
 ## [v0.1.0](https://github.com/fgagarin/framecover/releases/tag/v0.1.0) - 2026-10-24
 
 <small>[Compare with first commit](https://github.com/fgagarin/framecover/compare/df45912de7bb89ec4bf27f1b8063f3feb5c7a8ca...v0.1.0)</small>
