@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 body = """
 {%- set repo = "https://github.com/fgagarin/framecover" -%}
 {% if version -%}
-## [{{ version }}]({{ repo }}/releases/tag/{{ version }}) - {{ timestamp | date(format="%Y-%m-%d") }}
+## [{{ version }}]({{ repo }}/releases/tag/{{ version }}) - {{ timestamp | date(format="%Y-%m-%d", timezone="Asia/Tokyo") }}
 
 {% if previous.version -%}
 <small>[Compare with {{ previous.version }}]({{ repo }}/compare/{{ previous.version }}...{{ version }})</small>
