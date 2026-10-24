@@ -23,7 +23,12 @@ ureq = { version = "3.5.0", features = ["json"] }
 windows-sys = { version = "0.61.2", features = ["Win32_UI_Shell", "Win32_System_Threading", "Win32_Foundation"] }
 
 [dev-dependencies]
+criterion = { version = "0.7", default-features = false }
 tempfile = "3.27.0"
+
+[[bench]]
+name = "frame_extraction"
+harness = false
 
 [lints]
 workspace = true

@@ -81,6 +81,8 @@ pub struct Stream {
     #[serde(default)]
     duration: Option<String>,
     #[serde(default)]
+    duration_ts: Option<i64>,
+    #[serde(default)]
     pub disposition: Disposition,
     #[serde(default)]
     pub tags: HashMap<String, String>,
@@ -118,6 +120,11 @@ impl Stream {
             .as_deref()
             .and_then(Rational::parse)
             .filter(|r| r.num > 0)
+    }
+
+    /// Stream duration in `time_base` units (`duration_ts`), if reported.
+    pub fn duration_ts(&self) -> Option<i64> {
+        self.duration_ts
     }
 
     /// Stream duration in seconds, if reported.
