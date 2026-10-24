@@ -63,10 +63,10 @@ export component AppFooter inherits HorizontalLayout {
     }
     VerticalLayout { alignment: center; Separator { } }
     Link {
-        text: "Project page";
+        text: "Project page ↗";
         tooltip: root.project-url;
+        subtle: true;
         clicked => { root.open-project-page(); }
-        FooterText { text: "↗"; }
     }
     Rectangle { horizontal-stretch: 1; }
 
