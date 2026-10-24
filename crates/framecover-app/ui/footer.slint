@@ -1,6 +1,7 @@
 // Bottom bar: name and version (opens About), project link, update status (AppFooter).
 
 import { Theme } from "theme.slint";
+import { StatusDot } from "icons.slint";
 
 component FooterText inherits Text {
     font-size: 12px;
@@ -24,6 +25,8 @@ component Link inherits Rectangle {
     in property <string> tooltip;
     in property <bool> enabled: true;
     in property <color> accent: transparent;
+    /// Colour of a status dot before the text; `transparent` for none.
+    in property <color> dot: transparent;
     callback clicked();
     property <color> text-color: touch.has-hover && root.enabled ? Theme.link
         : root.accent != transparent ? root.accent
@@ -33,7 +36,11 @@ component Link inherits Rectangle {
     accessible-enabled: root.enabled;
     accessible-action-default => { if root.enabled { root.clicked(); } }
     HorizontalLayout {
-        spacing: 3px;
+        spacing: root.dot != transparent ? 6px : 3px;
+        if root.dot != transparent: VerticalLayout {
+            alignment: center;
+            StatusDot { tint: root.dot; }
+        }
         FooterText { text: root.text; color: root.text-color; }
         if root.suffix != "": FooterText { text: root.suffix; color: root.text-color; }
     }
@@ -54,6 +61,7 @@ export component AppFooter inherits HorizontalLayout {
     in property <bool> status-enabled: true;
     /// Text colour for a status that needs attention; `transparent` for grey.
     in property <color> status-color: transparent;
+    in property <color> status-dot-color: Theme.dot-idle;
     callback open-project-page();
     callback show-about();
     callback status-clicked();
@@ -83,6 +91,7 @@ export component AppFooter inherits HorizontalLayout {
         tooltip: root.status-tooltip;
         enabled: root.status-enabled;
         accent: root.status-color;
+        dot: root.status-dot-color;
         clicked => { root.status-clicked(); }
     }
 }

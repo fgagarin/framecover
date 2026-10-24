@@ -161,6 +161,17 @@ fn to_image(img: &RgbImage) -> Image {
     Image::from_rgb8(to_pixel_buffer(img))
 }
 
+/// Footer update dot colour.
+fn dot_color(dot: Dot) -> slint::Color {
+    let hex = match dot {
+        Dot::Idle => 0x9ca3af,
+        Dot::Latest => 0x3b82f6,
+        Dot::Update => 0x22c55e,
+        Dot::Error => 0xf59e0b,
+    };
+    slint::Color::from_argb_encoded(0xff00_0000 | hex)
+}
+
 /// Footer update text colour: only states that need attention are coloured;
 /// the rest use the footer's grey (`transparent`).
 fn status_color(dot: Dot) -> slint::Color {
@@ -610,6 +621,7 @@ impl App {
         w.set_update_tooltip(s.update.tooltip.as_str().into());
         w.set_update_enabled(s.update.enabled);
         w.set_update_color(status_color(s.update.dot));
+        w.set_update_dot_color(dot_color(s.update.dot));
 
         w.set_video_path(
             s.video

@@ -36,6 +36,7 @@ export component AppWindow inherits Window {
     in property <string> update-tooltip;
     in property <bool> update-enabled: true;
     in property <color> update-color: transparent;
+    in property <color> update-dot-color: Theme.dot-idle;
 
     // Editor
     in property <string> video-path;
@@ -188,6 +189,7 @@ export component AppWindow inherits Window {
                 status-tooltip: root.update-tooltip;
                 status-enabled: root.update-enabled;
                 status-color: root.update-color;
+                status-dot-color: root.update-dot-color;
                 open-project-page => { root.open-project-page(); }
                 show-about => { root.show-about(); }
                 status-clicked => { root.update-clicked(); }
