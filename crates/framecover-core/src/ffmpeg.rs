@@ -44,11 +44,20 @@ impl Tool {
     }
 }
 
-static BUNDLED_DIR: OnceLock<PathBuf> = OnceLock::new();
+type DirProvider = Box<dyn Fn() -> Option<PathBuf> + Send + Sync>;
+
+static BUNDLED_DIR: OnceLock<DirProvider> = OnceLock::new();
 
 /// Register a directory holding bundled binaries (called once at startup).
 pub fn set_bundled_dir(dir: PathBuf) {
-    let _ = BUNDLED_DIR.set(dir);
+    set_bundled_dir_provider(move || Some(dir.clone()));
+}
+
+/// Register a function returning the bundled-binaries directory. It may
+/// block, e.g. until the app has finished unpacking embedded binaries, so
+/// every lookup waits for them instead of falling through to `PATH`.
+pub fn set_bundled_dir_provider(provider: impl Fn() -> Option<PathBuf> + Send + Sync + 'static) {
+    let _ = BUNDLED_DIR.set(Box::new(provider));
 }
 
 /// Locate `tool`, returning an error if no candidate exists.
@@ -68,7 +77,7 @@ pub fn locate(tool: Tool) -> Result<PathBuf> {
 
     let name = tool.file_name();
     let mut candidates = Vec::new();
-    if let Some(dir) = BUNDLED_DIR.get() {
+    if let Some(dir) = BUNDLED_DIR.get().and_then(|provider| provider()) {
         candidates.push(dir.join(&name));
     }
     if let Ok(exe) = std::env::current_exe()

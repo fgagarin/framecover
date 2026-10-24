@@ -86,6 +86,7 @@ pub fn run() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
     install_panic_hook();
     crate::services::set_app_user_model_id();
+    crate::embedded::install();
 
     let services = Services::production();
     let settings = Settings::load();
@@ -725,7 +726,10 @@ fn about_text() -> String {
         "FrameCover {}\n\
 Pick any frame of a video and make it the file's thumbnail.\n\n\
 by {AUTHOR_NAME} · MIT License\n{PROJECT_URL}\n\n\
-The user interface is made with Slint, used under the Slint Royalty-free License 2.0.",
+The user interface is made with Slint, used under the Slint Royalty-free License 2.0.\n\n\
+Video processing is done by FFmpeg (ffmpeg.org), a separate program bundled with \
+FrameCover and licensed under the GNU GPL v3. Licence text, build sources and the \
+written source offer: https://github.com/fgagarin/framecover/blob/main/licenses/FFMPEG-NOTICE.txt",
         framecover_core::VERSION
     )
 }
