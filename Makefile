@@ -1,78 +1,61 @@
-.PHONY: help sync dist-linux dist-macos dist-windows test lint typecheck coverage clean changelog release
+# Thin convenience wrapper: every target delegates to cargo / `cargo xtask`,
+# which works the same without make (e.g. on a plain Windows shell).
 
-UV ?= uv
+.PHONY: help ffmpeg build run test lint fmt changelog release dist clean
+
+CARGO ?= cargo
 VERSION ?=
 
+ifeq ($(OS),Windows_NT)
+  PLATFORM ?= windows
+else ifeq ($(shell uname -s),Darwin)
+  PLATFORM ?= macos
+else
+  PLATFORM ?= linux
+endif
+
 help:
-	@echo "FrameCover build targets"
+	@echo "FrameCover build targets (see 'cargo xtask help' for details)"
 	@echo ""
-	@echo "  sync         Install / sync all dependencies via uv"
-	@echo "  dist-linux   Build a Linux single-file executable  (run on Linux)"
-	@echo "  dist-macos   Build a macOS .app bundle             (run on macOS)"
-	@echo "  dist-windows Build a Windows .exe                  (run on Windows)"
-	@echo "  NOTE: PyInstaller cannot cross-compile. Each dist target must be"
-	@echo "        run on its native OS. Use GitHub Actions for CI builds."
-	@echo ""
-	@echo "  test         Run unit and integration tests"
-	@echo "  lint         Run ruff linter"
-	@echo "  typecheck    Run ty type check"
-	@echo "  coverage     Run tests with >=80% coverage gate"
-	@echo "  changelog    Generate CHANGELOG.md from Conventional Commits"
-	@echo "  release      Commit and tag a release (VERSION=X.Y.Z, or auto)"
-	@echo "               Does not push; push the branch and tag to publish"
-	@echo "  clean        Remove build artefacts"
+	@echo "  ffmpeg     Download the pinned FFmpeg build for this OS into vendor/ffmpeg/"
+	@echo "  build      Build the app (debug)"
+	@echo "  run        Run the app (debug)"
+	@echo "  test       Run all workspace tests"
+	@echo "  lint       cargo fmt --check + clippy -D warnings"
+	@echo "  fmt        Format the code"
+	@echo "  changelog  Regenerate CHANGELOG.md (git-cliff)"
+	@echo "  release    Commit and tag a release (VERSION=X.Y.Z, or auto); never pushes"
+	@echo "  dist       Build release-assets/framecover-<version>-$(PLATFORM).* for this OS"
+	@echo "  clean      Remove build artefacts"
 
-# ── Environment ───────────────────────────────────────────────────────────────
+ffmpeg:
+	$(CARGO) xtask fetch-ffmpeg
 
-sync:
-	$(UV) sync --extra dev
+build:
+	$(CARGO) build -p framecover
 
-changelog:
-	$(UV) run git-changelog --output CHANGELOG.md
-
-release:
-	$(UV) run python scripts/release.py create --version "$(VERSION)" --uv "$(UV)"
-
-# ── Distribution ─────────────────────────────────────────────────────────────
-
-dist-linux:
-	$(UV) run pyinstaller pyinstaller.spec \
-		--distpath dist/linux \
-		--workpath build/linux \
-		--noconfirm
-
-dist-macos:
-	$(UV) run pyinstaller pyinstaller.spec \
-		--distpath dist/macos \
-		--workpath build/macos \
-		--noconfirm
-
-dist-windows:
-	$(UV) run pyinstaller pyinstaller.spec \
-		--distpath dist/windows \
-		--workpath build/windows \
-		--noconfirm
-
-# ── Quality gates ─────────────────────────────────────────────────────────────
+run:
+	$(CARGO) run -p framecover
 
 test:
-	$(UV) run pytest tests/unit/ tests/integration/ -q
+	$(CARGO) test --workspace
 
 lint:
-	$(UV) run ruff check src/ tests/ scripts/
+	$(CARGO) fmt --all --check
+	$(CARGO) clippy --workspace --all-targets -- -D warnings
 
-typecheck:
-	$(UV) run ty check
+fmt:
+	$(CARGO) fmt --all
 
-coverage:
-	$(UV) run pytest --cov=framecover \
-		--cov-report=term-missing \
-		--cov-fail-under=80 \
-		tests/unit/ tests/integration/
+changelog:
+	$(CARGO) xtask changelog
 
-# ── Housekeeping ──────────────────────────────────────────────────────────────
+release:
+	$(CARGO) xtask release create $(if $(VERSION),--version $(VERSION),)
+
+dist: ffmpeg
+	$(CARGO) xtask package $(PLATFORM)
 
 clean:
-	rm -rf build/ dist/ __pycache__ .pytest_cache \
-		src/framecover/__pycache__ \
-		*.egg-info
+	$(CARGO) clean
+	rm -rf release-assets
