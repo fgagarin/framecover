@@ -1,0 +1,23 @@
+FrameCover bundles unmodified FFmpeg executables (ffmpeg, ffprobe).
+
+FFmpeg is a separate program, run as a child process. The bundled builds
+are configured with --enable-gpl --enable-version3 (they include libx264,
+libaom and other GPL components) and are therefore distributed under the
+GNU General Public License, version 3 -- see FFmpeg-GPL-3.0.txt.
+FrameCover itself is MIT-licensed (see LICENSE).
+
+Builds and their sources:
+  Windows, Linux:  FFmpeg n8.1.3, built by BtbN/FFmpeg-Builds
+                   https://github.com/BtbN/FFmpeg-Builds
+                   (build scripts and per-release source references are
+                   published there; the exact archive URLs and SHA-256
+                   checksums are listed in xtask/ffmpeg-pins.toml)
+  macOS:           FFmpeg 8.1.2, built by Martin Riedl
+                   https://ffmpeg.martin-riedl.de
+FFmpeg source code: https://ffmpeg.org/download.html
+                    https://git.ffmpeg.org/ffmpeg.git
+
+If you received FrameCover in binary form and cannot obtain the corresponding
+FFmpeg source from the links above, open an issue at
+https://github.com/fgagarin/framecover/issues and the source will be provided
+for at least three years from the release date.

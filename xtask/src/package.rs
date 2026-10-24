@@ -74,6 +74,16 @@ pub fn package(
                 Entry::file("framecover/ffmpeg", ffmpeg_dir.join(ffmpeg), 0o755),
                 Entry::file("framecover/ffprobe", ffmpeg_dir.join(ffprobe), 0o755),
                 Entry::file("framecover/LICENSE", root().join("LICENSE"), 0o644),
+                Entry::file(
+                    "framecover/FFMPEG-NOTICE.txt",
+                    root().join("licenses/FFMPEG-NOTICE.txt"),
+                    0o644,
+                ),
+                Entry::file(
+                    "framecover/FFmpeg-GPL-3.0.txt",
+                    root().join("licenses/FFmpeg-GPL-3.0.txt"),
+                    0o644,
+                ),
             ];
             let asset = out_dir.join(format!("{name}.tar.gz"));
             write_tar_gz(&asset, &entries, mtime)?;
@@ -132,6 +142,16 @@ pub fn package(
                 Entry::file(
                     &format!("{app}/Resources/LICENSE"),
                     root().join("LICENSE"),
+                    0o644,
+                ),
+                Entry::file(
+                    &format!("{app}/Resources/FFMPEG-NOTICE.txt"),
+                    root().join("licenses/FFMPEG-NOTICE.txt"),
+                    0o644,
+                ),
+                Entry::file(
+                    &format!("{app}/Resources/FFmpeg-GPL-3.0.txt"),
+                    root().join("licenses/FFmpeg-GPL-3.0.txt"),
                     0o644,
                 ),
             ];
