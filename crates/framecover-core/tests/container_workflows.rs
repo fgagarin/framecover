@@ -169,7 +169,8 @@ fn webm_is_informational_noop() {
     assert_eq!(
         message.as_deref(),
         Some(
-            "WEBM does not support embedded cover art; Linux file manager icon updated via XDG cache"
+            "WebM files can't hold cover art; the video is unchanged and only the file \
+             manager's thumbnail is refreshed."
         )
     );
     assert_eq!(std::fs::read(&path).unwrap(), original);
@@ -191,7 +192,10 @@ fn avi_pipeline_succeeds_with_note_and_keeps_duration() {
     assert!(success);
     assert_eq!(
         message.as_deref(),
-        Some("AVI does not support embedded cover art; file manager will generate its own preview")
+        Some(
+            "AVI files can't hold cover art; the video was re-muxed without one, so the \
+             file manager shows its own preview."
+        )
     );
     let updated = support::load(&path);
     assert!(updated.duration_ms.abs_diff(original.duration_ms) < 500);
@@ -228,6 +232,6 @@ fn flv_pipeline_is_noop() {
     let original = std::fs::read(&path).unwrap();
     let (success, message) = run_pipeline(&path);
     assert!(success);
-    assert!(message.unwrap().contains("does not support"));
+    assert!(message.unwrap().contains("can't hold cover art"));
     assert_eq!(std::fs::read(&path).unwrap(), original);
 }

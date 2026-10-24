@@ -365,7 +365,8 @@ fn flv_returns_informational_success_without_changes() {
     assert_eq!(
         result.error_message.as_deref(),
         Some(
-            "FLV does not support embedded cover art; Linux file manager icon updated via XDG cache"
+            "FLV files can't hold cover art; the video is unchanged and only the file \
+             manager's thumbnail is refreshed."
         )
     );
     assert_eq!(std::fs::read(&path).unwrap(), original);

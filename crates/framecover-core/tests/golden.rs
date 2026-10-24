@@ -722,6 +722,23 @@ fn apply_intentional_deviations(case: &str, golden: &mut Value, cmds: &mut [Valu
         "save_avi" => insert_before(cmds, 0, "-c", &["-map", "0"]),
         _ => {}
     }
+
+    // Fix 3 (README behaviour 5): the informational message of containers
+    // without cover art no longer claims a Linux XDG cache update (wrong on
+    // Windows/macOS and for saved copies); see `no_cover_art_note`.
+    let note = match case {
+        "save_webm" => Some(VideoFormat::Webm),
+        "save_flv" => Some(VideoFormat::Flv),
+        "save_avi" => Some(VideoFormat::Avi),
+        _ => None,
+    };
+    if let Some(format) = note {
+        set(
+            golden,
+            "/save/result/error_message",
+            json!(framecover_core::thumbnail_writer::no_cover_art_note(format)),
+        );
+    }
 }
 
 fn golden_cmd_manifest(cmds: &mut [Value], i: usize) -> &mut Value {

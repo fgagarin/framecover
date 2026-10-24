@@ -546,11 +546,7 @@ impl ThumbnailWriter for FormatDispatchThumbnailWriter {
                     Ok(ApplyResult {
                         success: true,
                         elapsed_ms: elapsed_ms(start),
-                        error_message: Some(format!(
-                            "{} does not support embedded cover art; \
-                             Linux file manager icon updated via XDG cache",
-                            video.format.name()
-                        )),
+                        error_message: Some(no_cover_art_note(video.format)),
                         ..ApplyResult::default()
                     })
                 }
@@ -592,11 +588,7 @@ impl ThumbnailWriter for FormatDispatchThumbnailWriter {
                     Ok(ApplyResult {
                         success: true,
                         elapsed_ms: elapsed_ms(start),
-                        error_message: Some(
-                            "AVI does not support embedded cover art; \
-                             file manager will generate its own preview"
-                                .to_owned(),
-                        ),
+                        error_message: Some(no_cover_art_note(video.format)),
                         ..ApplyResult::default()
                     })
                 }
@@ -623,6 +615,31 @@ impl ThumbnailWriter for FormatDispatchThumbnailWriter {
             // Python lets the PyAV error propagate; the UI only shows text.
             Err(err) => Some(format!("Could not inspect the video streams: {err}")),
         }
+    }
+}
+
+/// Informational `error_message` of a successful save in a container that
+/// cannot hold cover art (WebM, FLV, AVI). Platform-neutral on purpose: the
+/// thumbnail cache refresh happens afterwards in the app (Linux writes the
+/// frame into the XDG cache; Windows and macOS only ask the shell to
+/// refresh), and the same text fits in-place saves and saved copies.
+pub fn no_cover_art_note(format: VideoFormat) -> String {
+    let name = match format {
+        VideoFormat::Webm => "WebM",
+        VideoFormat::Flv => "FLV",
+        VideoFormat::Avi => "AVI",
+        other => other.name(),
+    };
+    if format == VideoFormat::Avi {
+        format!(
+            "{name} files can't hold cover art; the video was re-muxed without one, \
+             so the file manager shows its own preview."
+        )
+    } else {
+        format!(
+            "{name} files can't hold cover art; the video is unchanged and only the \
+             file manager's thumbnail is refreshed."
+        )
     }
 }
 

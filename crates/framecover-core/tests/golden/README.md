@@ -214,3 +214,5 @@ with a comment per fix) and compares everything else against Python.
   `save_mkv_two_audio` keeps both audio tracks. MKV re-saves drop only
   cover-named attachments (`cover.jpg`, `cover.png`, `cover.jpeg`,
   `folder.jpg`) before attaching the new `cover.jpg`.
+- Behaviour 5 (misleading messages): WebM/FLV/AVI successes carry
+  `thumbnail_writer::no_cover_art_note`, which makes no platform claim.
