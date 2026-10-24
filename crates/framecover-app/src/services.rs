@@ -1,14 +1,15 @@
 //! Service seams between the GUI and `framecover-core`.
 //!
 //! The controller and workers only see the traits in this module (plus the
-//! core's own `VideoLoader`, `FrameExtractor` and `ThumbnailWriter`, which
-//! already exist as stable contracts). Concrete core implementations are
+//! core's own `VideoLoader`, `FrameExtractor`, `FrameSource` and
+//! `ThumbnailWriter`, which already exist as stable contracts). Concrete core implementations are
 //! connected in exactly one place, [`Services::production`].
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use framecover_core::converter::FfmpegVideoConverter;
+use framecover_core::frame_stream::{FfmpegFrameStream, FrameSource};
 use framecover_core::frames::{FfmpegFrameExtractor, FrameExtractor};
 use framecover_core::loader::{FfprobeVideoLoader, VideoLoader};
 use framecover_core::platform;
@@ -64,11 +65,17 @@ pub trait Desktop: Send + Sync {
     fn open_url(&self, url: &str) -> bool;
 }
 
+/// Creates the scrubbing [`FrameSource`] for a newly loaded video.
+pub type FrameSourceFactory = Arc<dyn Fn(&VideoFile) -> Box<dyn FrameSource> + Send + Sync>;
+
 /// Every service the GUI uses, as shareable trait objects.
 #[derive(Clone)]
 pub struct Services {
     pub loader: Arc<dyn VideoLoader>,
+    /// One-off extractions (filmstrip tiles).
     pub extractor: Arc<dyn FrameExtractor>,
+    /// The preview's frames while scrubbing (one source per loaded video).
+    pub frame_sources: FrameSourceFactory,
     pub writer: Arc<dyn ThumbnailWriter>,
     pub copier: Arc<dyn CopySaver>,
     pub converter: Arc<dyn VideoConverter>,
@@ -84,6 +91,7 @@ impl Services {
         Self {
             loader: Arc::new(FfprobeVideoLoader),
             extractor: Arc::new(FfmpegFrameExtractor),
+            frame_sources: Arc::new(|video| Box::new(FfmpegFrameStream::new(video.clone()))),
             writer: Arc::new(FormatDispatchThumbnailWriter),
             copier: Arc::new(CoreCopySaver),
             converter: Arc::new(CoreConverter),
@@ -277,6 +285,16 @@ pub(crate) mod fakes {
         fn load(&self, path: &Path) -> framecover_core::Result<VideoFile> {
             (self.0)(path)
         }
+    }
+
+    /// Frame sources that run `extractor` for every request.
+    pub fn extractor_sources(extractor: Arc<dyn FrameExtractor>) -> FrameSourceFactory {
+        Arc::new(move |video| {
+            Box::new(framecover_core::frame_stream::ExtractorFrameSource::new(
+                Arc::clone(&extractor),
+                video.clone(),
+            ))
+        })
     }
 
     pub struct FakeExtractor(pub Box<ExtractFn>);

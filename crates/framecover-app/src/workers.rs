@@ -11,6 +11,7 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+use framecover_core::frame_stream::FrameSource;
 use framecover_core::{ApplyResult, Error, UpdateInfo, VideoFile};
 use image::RgbImage;
 
@@ -95,15 +96,9 @@ pub fn run_load(services: &Services, path: &Path) -> LoadOutcome {
     }
 }
 
-pub fn run_extract(
-    services: &Services,
-    video: &VideoFile,
-    position_ms: u64,
-) -> Result<RgbImage, String> {
-    services
-        .extractor
-        .extract(video, position_ms)
-        .map_err(|e| details(&e))
+/// The preview frame nearest to `position_ms` from the video's frame source.
+pub fn run_frame_at(source: &mut dyn FrameSource, position_ms: u64) -> Result<RgbImage, String> {
+    source.frame_at(position_ms).map_err(|e| details(&e))
 }
 
 pub fn run_convert(
@@ -204,6 +199,18 @@ pub(crate) mod tests {
     }
 
     pub(crate) fn services() -> (Services, Fakes) {
+        let extractor: Arc<dyn framecover_core::frames::FrameExtractor> =
+            Arc::new(FakeExtractor(Box::new(|_, ms| {
+                if ms == 666 {
+                    Err(Error::Extraction {
+                        path: "/fake/video.mp4".into(),
+                        offset_ms: ms,
+                        cause: "decode fail".into(),
+                    })
+                } else {
+                    Ok(RgbImage::new(32, 32))
+                }
+            })));
         let writer = Arc::new(FakeWriter::default());
         let copier = Arc::new(FakeCopier::default());
         let invalidator = Arc::new(FakeInvalidator::default());
@@ -223,17 +230,8 @@ pub(crate) mod tests {
                     )))
                 }
             }))),
-            extractor: Arc::new(FakeExtractor(Box::new(|_, ms| {
-                if ms == 666 {
-                    Err(Error::Extraction {
-                        path: "/fake/video.mp4".into(),
-                        offset_ms: ms,
-                        cause: "decode fail".into(),
-                    })
-                } else {
-                    Ok(RgbImage::new(32, 32))
-                }
-            }))),
+            extractor: Arc::clone(&extractor),
+            frame_sources: extractor_sources(extractor),
             writer: writer.clone(),
             copier: copier.clone(),
             converter: Arc::new(FakeConverter(Box::new(|_, d| Ok(d.to_owned())))),
@@ -285,8 +283,9 @@ pub(crate) mod tests {
     #[test]
     fn extract_error_has_details() {
         let (s, _) = services();
-        assert!(run_extract(&s, &video(5000), 10).is_ok());
-        let err = run_extract(&s, &video(5000), 666).unwrap_err();
+        let mut source = (s.frame_sources)(&video(5000));
+        assert!(run_frame_at(source.as_mut(), 10).is_ok());
+        let err = run_frame_at(source.as_mut(), 666).unwrap_err();
         assert!(err.contains("decode fail"));
     }
 
@@ -451,7 +450,9 @@ mod production_tests {
         let video = loaded(&services, &source);
         assert_eq!((video.width, video.height), (320, 240));
         assert_eq!(services.writer.reencode_reason(&video), None);
-        let frame = run_extract(&services, &video, 1200).unwrap();
+        let mut frames = (services.frame_sources)(&video);
+        let frame = run_frame_at(frames.as_mut(), 1200).unwrap();
+        assert!(frame == services.extractor.extract(&video, 1200).unwrap());
         assert_eq!(frame.dimensions(), (320, 240));
 
         let destination = default_copy_path(&source);
@@ -477,6 +478,35 @@ mod production_tests {
             copy.thumbnail_position_ms,
             Some(1200 + result.duration_shift_ms)
         );
+    }
+
+    /// The app releases the preview's decoder before an in-place save, which
+    /// replaces the file (impossible on Windows while ffmpeg holds it open).
+    #[test]
+    fn scrub_release_and_save_in_place() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("clip.mp4");
+        generate(
+            &source,
+            &["-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac"],
+        );
+        let services = Services::production();
+        let video = loaded(&services, &source);
+        let mut frames = (services.frame_sources)(&video);
+        let frame = run_frame_at(frames.as_mut(), 1000).unwrap();
+        run_frame_at(frames.as_mut(), 1040).unwrap();
+        drop(frames);
+
+        let job = SaveJob {
+            video: Arc::new(video),
+            thumbnail: Arc::new(frame),
+            position_ms: Some(1000),
+            destination: None,
+            overwrite: false,
+        };
+        let result = run_apply(&services, &job, &mut |_, _| {});
+        assert!(result.success, "{:?}", result.error_message);
+        assert!(loaded(&services, &source).existing_thumbnail.is_some());
     }
 
     #[test]

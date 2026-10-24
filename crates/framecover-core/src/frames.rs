@@ -49,9 +49,8 @@ impl FrameExtractor for FfmpegFrameExtractor {
         };
 
         let step_ms = video.frame_step_ms.max(1);
-        // Microseconds keep half-step precision for odd frame steps.
         let target_us = offset_ms * 1000;
-        let seek_us = target_us.saturating_sub(step_ms * 500);
+        let seek_us = seek_point_us(video, offset_ms);
         if let Some(frame) = decode(&video.path, seek_us, Some(1)).map_err(fail)? {
             return Ok(frame);
         }
@@ -70,6 +69,13 @@ impl FrameExtractor for FfmpegFrameExtractor {
         }
         Err(fail("no frame decoded after seek".into()))
     }
+}
+
+/// Accurate-seek point for `offset_ms`: half a frame step before it, so the
+/// first frame at or after it is the one nearest to the target. Microseconds
+/// keep half-step precision for odd frame steps.
+pub(crate) fn seek_point_us(video: &VideoFile, offset_ms: u64) -> u64 {
+    (offset_ms * 1000).saturating_sub(video.frame_step_ms.max(1) * 500)
 }
 
 /// Decode frames of the first playable video stream from `seek_us` onwards
@@ -126,7 +132,8 @@ fn decode(path: &Path, seek_us: u64, max_frames: Option<u32>) -> Result<Option<R
     Ok(last)
 }
 
-fn format_secs(us: u64) -> String {
+/// `us` microseconds as an ffmpeg `-ss` value (`S.ffffff`).
+pub(crate) fn format_secs(us: u64) -> String {
     format!("{}.{:06}", us / 1_000_000, us % 1_000_000)
 }
 

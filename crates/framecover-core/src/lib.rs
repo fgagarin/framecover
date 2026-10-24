@@ -7,6 +7,7 @@ pub mod atomic_write;
 pub mod converter;
 pub mod error;
 pub mod ffmpeg;
+pub mod frame_stream;
 pub mod frames;
 pub mod imaging;
 pub mod loader;

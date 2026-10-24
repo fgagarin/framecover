@@ -30,6 +30,7 @@ use crate::error_report::{
     ErrorReport, build_google_search_url, build_issue_url, format_panic_report,
 };
 use crate::filmstrip::{FilmJob, Filmstrip, TARGET_TILE_WIDTH, TILE_HEIGHT};
+use crate::frame_worker::FrameWorker;
 use crate::services::Services;
 use crate::settings::Settings;
 use crate::workers::{self, LoadOutcome, panic_message, spawn_guarded};
@@ -37,6 +38,11 @@ use crate::{AppWindow, DialogData, DialogKind, FilmTile};
 
 pub const AUTHOR_NAME: &str = "Fedor Gagarin";
 pub const PROJECT_URL: &str = "https://fgagarin.github.io/framecover/";
+
+/// Filmstrip jobs wait until preview frame requests have paused this long…
+const FILM_YIELD_QUIET: Duration = Duration::from_millis(150);
+/// …but no longer than this, so a long scrub cannot stall the filmstrip.
+const FILM_YIELD_MAX: Duration = Duration::from_secs(2);
 
 /// Messages delivered to the UI thread.
 enum Msg {
@@ -69,6 +75,8 @@ struct App {
     window: AppWindow,
     controller: RefCell<Controller>,
     services: Services,
+    /// Decodes the preview frames (one persistent source per video).
+    frames: FrameWorker,
     settings: RefCell<Settings>,
     filmstrip: RefCell<Filmstrip<Image>>,
     progress_timer: Timer,
@@ -98,6 +106,7 @@ pub fn run() {
     let app = Rc::new(App {
         window,
         controller: RefCell::new(controller),
+        frames: FrameWorker::spawn(Arc::clone(&services.frame_sources)),
         services,
         settings: RefCell::new(settings),
         filmstrip: RefCell::new(Filmstrip::default()),
@@ -376,22 +385,20 @@ impl App {
                 video,
                 position_ms,
                 generation,
-            } => {
-                let services = self.services.clone();
-                spawn_guarded(
-                    "extract-frame",
-                    move || workers::run_extract(&services, &video, position_ms),
-                    move |outcome| {
-                        post(match outcome.and_then(|r| r) {
-                            Ok(image) => Event::FrameExtracted { generation, image },
-                            Err(details) => Event::FrameExtractFailed {
-                                generation,
-                                details,
-                            },
-                        })
-                    },
-                );
-            }
+            } => self.frames.request(
+                video,
+                position_ms,
+                generation,
+                Box::new(move |outcome| {
+                    post(match outcome {
+                        Ok(image) => Event::FrameExtracted { generation, image },
+                        Err(details) => Event::FrameExtractFailed {
+                            generation,
+                            details,
+                        },
+                    })
+                }),
+            ),
             Effect::SetFilmstripVideo(video) => {
                 let jobs = self.filmstrip.borrow_mut().set_video(video);
                 self.run_film_jobs(jobs);
@@ -403,9 +410,15 @@ impl App {
             }
             Effect::Save(job) => {
                 let services = self.services.clone();
+                let frames = self.frames.releaser();
                 spawn_guarded(
                     "save-thumbnail",
                     move || {
+                        if job.destination.is_none() {
+                            // The preview decoder keeps the file open, which
+                            // would block replacing it on Windows.
+                            frames.release();
+                        }
                         workers::run_apply(&services, &job, &mut |stage, elapsed| {
                             post(Event::SaveProgress {
                                 stage: stage.to_owned(),
@@ -526,10 +539,13 @@ impl App {
     fn run_film_jobs(&self, jobs: Vec<FilmJob>) {
         for job in jobs {
             let extractor = Arc::clone(&self.services.extractor);
+            let activity = self.frames.activity();
             let (generation, frame_index) = (job.generation, job.frame_index);
             spawn_guarded(
                 "filmstrip",
                 move || {
+                    // Let the preview decode first while the user scrubs.
+                    activity.wait_until_quiet(FILM_YIELD_QUIET, FILM_YIELD_MAX);
                     let frame = extractor.extract(&job.video, job.position_ms).ok()?;
                     // Keep 2x the tile size for HiDPI screens.
                     let (w, h) = framecover_core::imaging::fit_within(

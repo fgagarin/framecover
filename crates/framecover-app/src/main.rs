@@ -6,6 +6,7 @@ mod controller;
 mod embedded;
 mod error_report;
 mod filmstrip;
+mod frame_worker;
 mod services;
 mod settings;
 mod timeline;
