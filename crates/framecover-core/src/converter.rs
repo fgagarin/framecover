@@ -1,7 +1,9 @@
 //! Conversion of other containers to MP4 (port of `core/video_converter.py`).
 //!
-//! Remux first (`-c copy`); if that fails, or the result is not eligible for
-//! the thumbnail writer's concat fast path, encode once to H.264/AAC trying
+//! Remux first (`-c copy`) when the source's video codec, profile and pixel
+//! format allow a concat-compatible result; if the source cannot qualify, the
+//! remux fails, or its result is not eligible for the thumbnail writer's
+//! concat fast path, encode once to H.264/AAC trying
 //! each available H.264 encoder in turn. Only the first playable video and all
 //! audio tracks are kept. The source is never modified and the destination is
 //! published only after FFmpeg succeeds (hardlink, so a concurrently created
@@ -94,8 +96,9 @@ pub fn default_conversion_path(source: &Path) -> PathBuf {
 // ---------------------------------------------------------------------------
 
 pub(crate) trait Backend {
-    /// Whether `path` has a non-attached-picture video stream.
-    fn has_playable_video(&self, path: &Path) -> Result<bool>;
+    /// Probe the source once: whether it has a non-attached-picture video
+    /// stream and, if so, why a stream-copy remux cannot be concat-compatible.
+    fn inspect_source(&self, path: &Path) -> Result<SourceCheck>;
     /// Locate ffmpeg; the error message is shown after "FFmpeg is unavailable: ".
     fn locate_ffmpeg(&self) -> std::result::Result<(), String>;
     /// Run ffmpeg with `args` (excluding the executable).
@@ -105,11 +108,24 @@ pub(crate) trait Backend {
     fn has_any_video(&self, path: &Path) -> Result<bool>;
 }
 
+/// Result of [`Backend::inspect_source`].
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct SourceCheck {
+    pub playable: bool,
+    /// `Some(reason)`: skip the remux and encode
+    /// ([`thumbnail_writer::remux_ineligibility_reason`]).
+    pub remux_blocker: Option<String>,
+}
+
 struct RealBackend;
 
 impl Backend for RealBackend {
-    fn has_playable_video(&self, path: &Path) -> Result<bool> {
-        Ok(probe::probe(path)?.first_playable_video().is_some())
+    fn inspect_source(&self, path: &Path) -> Result<SourceCheck> {
+        let info = probe::probe(path)?;
+        Ok(SourceCheck {
+            playable: info.first_playable_video().is_some(),
+            remux_blocker: thumbnail_writer::remux_ineligibility_reason(&info),
+        })
     }
     fn locate_ffmpeg(&self) -> std::result::Result<(), String> {
         match ffmpeg::locate(Tool::Ffmpeg) {
@@ -254,7 +270,8 @@ pub(crate) fn convert_with(
         return Err(Error::DestinationExists(destination_path));
     }
 
-    if !backend.has_playable_video(&source_path)? {
+    let source_check = backend.inspect_source(&source_path)?;
+    if !source_check.playable {
         return Err(Error::NoVideoStream(source_path));
     }
     backend
@@ -296,26 +313,13 @@ pub(crate) fn convert_with(
     let output: Vec<OsString> = vec![os("-movflags"), os("+faststart"), os(&temporary)];
 
     let outcome = (|| -> Result<()> {
-        if let Some(cb) = on_progress.as_mut() {
-            cb("Remuxing to MP4 without re-encoding");
-        }
-        let mut remux = common.clone();
-        remux.extend([os("-c"), os("copy")]);
-        remux.extend(output.iter().cloned());
-        let reason = match backend.run(remux) {
-            Err(Error::Ffmpeg { code, stderr }) => {
-                let reason = failure_details(code, &stderr);
-                warn!("MP4 remux failed: {reason}");
-                Some(reason)
-            }
-            Err(other) => return Err(other),
-            Ok(_) => {
-                let reason = backend.concat_reason(&temporary).map_err(invalid_output)?;
-                if let Some(r) = &reason {
-                    info!("MP4 remux requires normalization: {r}");
-                }
-                reason
-            }
+        let reason = if let Some(blocker) = source_check.remux_blocker.clone() {
+            // A stream copy keeps codec, profile and pixel format, so the
+            // remux could never be concat-compatible: encode directly.
+            info!("MP4 remux skipped, source requires normalization: {blocker}");
+            Some(blocker)
+        } else {
+            remux(backend, &common, &output, &temporary, &mut on_progress)?
         };
         if let Some(reason) = reason {
             transcode(
@@ -357,6 +361,39 @@ pub(crate) fn convert_with(
         ))),
         Err(other) => Err(other),
     }
+}
+
+/// Stream-copy remux into `temporary`. Returns why the result still needs
+/// encoding (remux failure or concat incompatibility), or `None` if it is
+/// ready.
+fn remux(
+    backend: &dyn Backend,
+    common: &[OsString],
+    output: &[OsString],
+    temporary: &Path,
+    on_progress: &mut Option<&mut dyn FnMut(&str)>,
+) -> Result<Option<String>> {
+    if let Some(cb) = on_progress.as_mut() {
+        cb("Remuxing to MP4 without re-encoding");
+    }
+    let mut args = common.to_vec();
+    args.extend([os("-c"), os("copy")]);
+    args.extend(output.iter().cloned());
+    Ok(match backend.run(args) {
+        Err(Error::Ffmpeg { code, stderr }) => {
+            let reason = failure_details(code, &stderr);
+            warn!("MP4 remux failed: {reason}");
+            Some(reason)
+        }
+        Err(other) => return Err(other),
+        Ok(_) => {
+            let reason = backend.concat_reason(temporary).map_err(invalid_output)?;
+            if let Some(r) = &reason {
+                info!("MP4 remux requires normalization: {r}");
+            }
+            reason
+        }
+    })
 }
 
 /// `-encoders` parsing exactly as Python: second field of lines whose first

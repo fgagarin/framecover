@@ -631,7 +631,7 @@ fn set_option(cmds: &mut [Value], i: usize, option: &str, value: &str) {
 /// two DTS (`setts`) instead of letting the muxer squash them.
 const SETTS_B_FRAMES: &str = "setts=pts=PTS:dts='if(lt(N,2),STARTPTS+(0)-(2-N)*512,DTS)'";
 
-fn apply_intentional_deviations(case: &str, golden: &mut Value, cmds: &mut [Value]) {
+fn apply_intentional_deviations(case: &str, golden: &mut Value, cmds: &mut Vec<Value>) {
     // Fix 1 (README behaviour 1, "frame rate drift"): concat outputs keep the
     // source's 25 fps, so the reloaded step is 40 ms (not 39) and the video
     // track is 5040 ms (125 frames + the preview, not 4960). On a re-save the
@@ -738,6 +738,20 @@ fn apply_intentional_deviations(case: &str, golden: &mut Value, cmds: &mut [Valu
             "/save/result/error_message",
             json!(framecover_core::thumbnail_writer::no_cover_art_note(format)),
         );
+    }
+
+    // Fix 4 (README behaviour 8): the converter decides from the source probe
+    // that MPEG-2 and WMV2 video can never be concat-compatible after a stream
+    // copy, so it skips the remux (its command and progress stage) and
+    // encodes directly. TS (H.264) still remuxes.
+    if matches!(case, "convert_mpg" | "convert_wmv") {
+        set(
+            golden,
+            "/convert/progress_stages",
+            json!(["Encoding MP4 with libx264 / AAC"]),
+        );
+        // The remux was the first command.
+        cmds.remove(0);
     }
 }
 

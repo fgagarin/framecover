@@ -313,36 +313,11 @@ fn concat_decision(
 
     let stream = playable[0];
     let codec_name = stream.codec_name.as_deref().unwrap_or("");
-    let raw_profile = named_profile(stream);
-    let profile = raw_profile.unwrap_or("").to_lowercase();
+    let profile = named_profile(stream).unwrap_or("").to_lowercase();
     let is_av1 = codec_name == "av1";
     let frame_rate = stream.effective_rate();
-    let mut reasons: Vec<String> = Vec::new();
-    if codec_name != "h264" && !is_av1 {
-        let long_name = decoder_long_name(codec_name)
-            .or_else(|| stream.codec_long_name.clone().filter(|s| !s.is_empty()))
-            .unwrap_or_else(|| codec_name.to_owned());
-        reasons.push(format!(
-            "video codec is {long_name} (fast copy supports H.264 and AV1 only)"
-        ));
-    }
-    if (is_av1 && profile != "main") || (!is_av1 && h264_profile(&profile).is_none()) {
-        reasons.push(format!(
-            "profile is {}",
-            py_repr_str(raw_profile.unwrap_or("(none)"))
-        ));
-    }
-    let pix_fmt = named_pix_fmt(stream);
-    if pix_fmt != Some("yuv420p") {
-        reasons.push(format!(
-            "pixel format is {}, not yuv420p",
-            pix_fmt.map_or_else(|| "None".to_owned(), py_repr_str)
-        ));
-    }
     let (width, height) = (stream.width.unwrap_or(0), stream.height.unwrap_or(0));
-    if width == 0 || height == 0 {
-        reasons.push(format!("invalid dimensions {width}x{height}"));
-    }
+    let mut reasons = codec_reasons(stream);
     let time_base = stream.time_base();
     if time_base.is_none_or(|tb| tb.num != 1) {
         reasons.push(format!(
@@ -388,6 +363,57 @@ fn concat_decision(
         }),
         None,
     )
+}
+
+/// Reasons a video stream's *coded* properties (codec, profile, pixel
+/// format, dimensions) rule out the concat fast path. A stream-copy remux
+/// keeps these, unlike the time base or measured frame rate.
+fn codec_reasons(stream: &Stream) -> Vec<String> {
+    let codec_name = stream.codec_name.as_deref().unwrap_or("");
+    let raw_profile = named_profile(stream);
+    let profile = raw_profile.unwrap_or("").to_lowercase();
+    let is_av1 = codec_name == "av1";
+    let mut reasons: Vec<String> = Vec::new();
+    if codec_name != "h264" && !is_av1 {
+        let long_name = decoder_long_name(codec_name)
+            .or_else(|| stream.codec_long_name.clone().filter(|s| !s.is_empty()))
+            .unwrap_or_else(|| codec_name.to_owned());
+        reasons.push(format!(
+            "video codec is {long_name} (fast copy supports H.264 and AV1 only)"
+        ));
+    }
+    if (is_av1 && profile != "main") || (!is_av1 && h264_profile(&profile).is_none()) {
+        reasons.push(format!(
+            "profile is {}",
+            py_repr_str(raw_profile.unwrap_or("(none)"))
+        ));
+    }
+    let pix_fmt = named_pix_fmt(stream);
+    if pix_fmt != Some("yuv420p") {
+        reasons.push(format!(
+            "pixel format is {}, not yuv420p",
+            pix_fmt.map_or_else(|| "None".to_owned(), py_repr_str)
+        ));
+    }
+    let (width, height) = (stream.width.unwrap_or(0), stream.height.unwrap_or(0));
+    if width == 0 || height == 0 {
+        reasons.push(format!("invalid dimensions {width}x{height}"));
+    }
+    reasons
+}
+
+/// Decide from a *source* probe (any container) whether converting it to MP4
+/// by stream copy can produce a concat-compatible file. Returns the reason it
+/// cannot, so the converter can encode straight away, or `None` if a remux is
+/// worth trying (the remuxed file is then verified with
+/// [`concat_ineligibility_reason`], since time base and frame rate are only
+/// known after muxing). Considers the stream the converter keeps (`0:V:0`).
+pub fn remux_ineligibility_reason(info: &ProbeInfo) -> Option<String> {
+    let Some(stream) = info.first_playable_video() else {
+        return Some("Expected one playable video stream; found 0.".to_owned());
+    };
+    let reasons = codec_reasons(stream);
+    (!reasons.is_empty()).then(|| format!("{}.", reasons.join("; ")))
 }
 
 fn concat_decision_for(
@@ -1395,6 +1421,30 @@ mod tests {
                  invalid dimensions 0x240; unsupported video time base AVRational(2, 90001); \
                  invalid frame rate None."
             )
+        );
+    }
+
+    #[test]
+    fn remux_decision_uses_coded_properties_only() {
+        // Time base and frame rate change with the remux: still a candidate.
+        let odd = H264
+            .replace("\"1/12800\"", "\"2/90001\"")
+            .replace("\"25/1\"", "\"0/0\"");
+        assert_eq!(remux_ineligibility_reason(&probe_json(&odd, COVER)), None);
+        let mpeg2 = r#"{"index": 0, "codec_type": "video", "codec_name": "mpeg2video",
+            "codec_long_name": "MPEG-2 video", "profile": "Main", "pix_fmt": "yuv420p",
+            "width": 320, "height": 240, "time_base": "1/90000", "avg_frame_rate": "25/1",
+            "disposition": {"attached_pic": 0}}"#;
+        let reason = remux_ineligibility_reason(&probe_json(mpeg2, "")).unwrap();
+        assert!(reason.starts_with("video codec is "), "{reason}");
+        assert!(
+            reason.ends_with("(fast copy supports H.264 and AV1 only)."),
+            "{reason}"
+        );
+        let yuv444 = H264.replace("yuv420p", "yuv444p");
+        assert_eq!(
+            remux_ineligibility_reason(&probe_json(&yuv444, "")).as_deref(),
+            Some("pixel format is 'yuv444p', not yuv420p.")
         );
     }
 

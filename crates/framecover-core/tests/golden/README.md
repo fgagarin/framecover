@@ -216,3 +216,7 @@ with a comment per fix) and compares everything else against Python.
   `folder.jpg`) before attaching the new `cover.jpg`.
 - Behaviour 5 (misleading messages): WebM/FLV/AVI successes carry
   `thumbnail_writer::no_cover_art_note`, which makes no platform claim.
+- Behaviour 8 (wasted remux): the converter checks the source's codec,
+  profile, pixel format and dimensions first
+  (`thumbnail_writer::remux_ineligibility_reason`); `convert_mpg` and
+  `convert_wmv` encode without attempting the remux.

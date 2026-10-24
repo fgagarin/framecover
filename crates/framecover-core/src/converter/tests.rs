@@ -37,6 +37,7 @@ type RunFn = Box<dyn FnMut(&[OsString]) -> Result<Output>>;
 
 struct Fake {
     playable: bool,
+    remux_blocker: Option<String>,
     locate: std::result::Result<(), String>,
     runs: RefCell<VecDeque<RunFn>>,
     default_run: RefCell<Option<RunFn>>,
@@ -50,6 +51,7 @@ impl Default for Fake {
     fn default() -> Self {
         Self {
             playable: true,
+            remux_blocker: None,
             locate: Ok(()),
             runs: RefCell::default(),
             default_run: RefCell::new(None),
@@ -79,8 +81,11 @@ fn ret(r: impl Fn() -> Result<Output> + 'static) -> RunFn {
 }
 
 impl Backend for Fake {
-    fn has_playable_video(&self, _path: &Path) -> Result<bool> {
-        Ok(self.playable)
+    fn inspect_source(&self, _path: &Path) -> Result<SourceCheck> {
+        Ok(SourceCheck {
+            playable: self.playable,
+            remux_blocker: self.remux_blocker.clone(),
+        })
     }
     fn locate_ffmpeg(&self) -> std::result::Result<(), String> {
         self.locate.clone()
@@ -208,6 +213,26 @@ fn remuxable_but_concat_incompatible_video_is_normalized() {
         vec![Ok(Some("MPEG-2 cannot be concatenated".into())), Ok(None)].into();
     c.convert(&fake, false).unwrap();
     assert!(fake.last().iter().any(|a| a == "libx264"));
+}
+
+#[test]
+fn source_that_cannot_qualify_is_encoded_without_remux() {
+    let c = ctx();
+    let fake = Fake {
+        remux_blocker: Some("video codec is MPEG-2 video.".into()),
+        ..Fake::default()
+    }
+    .script(vec![ret(|| ok_output(X264_AAC)), write_output()]);
+    let mut progress = Vec::new();
+    let mut cb = |s: &str| progress.push(s.to_owned());
+    convert_with(&fake, &c.source, &c.target, false, Some(&mut cb)).unwrap();
+    let commands = fake.commands();
+    assert_eq!(commands.len(), 2);
+    assert_eq!(commands[0], ["-hide_banner", "-encoders"]);
+    assert_eq!(after(&commands[1], "-c:v"), "libx264");
+    assert!(!commands.iter().any(|c| c.iter().any(|a| a == "copy")));
+    assert_eq!(progress, ["Encoding MP4 with libx264 / AAC"]);
+    assert_eq!(std::fs::read(&c.target).unwrap(), b"converted");
 }
 
 #[test]
