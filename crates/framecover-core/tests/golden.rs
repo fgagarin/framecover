@@ -753,6 +753,98 @@ fn apply_intentional_deviations(case: &str, golden: &mut Value, cmds: &mut Vec<V
         // The remux was the first command.
         cmds.remove(0);
     }
+
+    // Fix 5 (README behaviour 2): the full re-encode inserts the poster as an
+    // extra first frame (a `concat` filter of a one-frame poster segment and
+    // the source) instead of painting it over frame 0. Like the concat path,
+    // a first save shifts everything by one frame (shift 40 ms, tags
+    // 2040 ms / frame 51, 126 frames) with audio/subtitles taken from a second
+    // `-itsoffset 0.04` input; a re-save trims the previous preview frame.
+    let first_reencode = |golden: &mut Value, cmds: &mut [Value], i: usize, at: &str| {
+        reencode_inserts_preview(cmds, i, false);
+        set(golden, &format!("{at}/result/duration_shift_ms"), json!(40));
+        set(
+            golden,
+            &format!("{at}/output/load/thumbnail_frame_number"),
+            json!(51),
+        );
+        set(
+            golden,
+            &format!("{at}/output/load/thumbnail_position_ms"),
+            json!(2040),
+        );
+        set(
+            golden,
+            &format!("{at}/output/probe/streams/0/nb_frames"),
+            json!(126),
+        );
+        set(
+            golden,
+            &format!("{at}/output/mp4_tags/frame_number"),
+            json!("51"),
+        );
+        set(
+            golden,
+            &format!("{at}/output/mp4_tags/position_ms"),
+            json!("2040"),
+        );
+    };
+    match case {
+        "save_mov" | "save_mp4_with_thumb" | "save_mp4_yuv444p" | "save_mp4_hevc" => {
+            first_reencode(golden, cmds, 0, "/save");
+        }
+        "resave_mov" => {
+            first_reencode(golden, cmds, 0, "/first_save");
+            reencode_inserts_preview(cmds, 1, true);
+            set(
+                golden,
+                "/second_save/output/probe/streams/0/nb_frames",
+                json!(126),
+            );
+        }
+        _ => {}
+    }
+}
+
+/// Fix 5: rewrite the Python overlay re-encode (command `i`) into the
+/// preview-inserting one for the 320x240 25 fps fixtures.
+fn reencode_inserts_preview(cmds: &mut [Value], i: usize, replace: bool) {
+    let source = argv(cmds, i)[3].clone();
+    let trim = if replace { "trim=start_frame=1," } else { "" };
+    let graph = format!(
+        "[1:v]scale=320:240:flags=lanczos,setsar=1/1,trim=end_frame=1[poster];\
+         [0:0]{trim}setpts=PTS-STARTPTS,setsar=1/1[base];\
+         [poster][base]concat=n=2:v=1:a=0[v]"
+    );
+    set_option(cmds, i, "-filter_complex", &graph);
+    // Frame 1 (the first source frame) is a keyframe, so the preview can
+    // later be stripped by stream copy.
+    insert_before(
+        cmds,
+        i,
+        "-c:v:1",
+        &["-force_key_frames:v:0", "expr:lte(n,1)"],
+    );
+    let a = argv(cmds, i);
+    let loop_at = a.iter().position(|v| v == "-loop").unwrap();
+    a.insert(loop_at + 2, json!("-framerate"));
+    a.insert(loop_at + 3, json!("25/1"));
+    if !replace {
+        let at = a.iter().position(|v| v == "-filter_complex").unwrap();
+        for (k, v) in [json!("-itsoffset"), json!("0.04"), json!("-i"), source]
+            .into_iter()
+            .enumerate()
+        {
+            a.insert(at + k, v);
+        }
+        for v in a.iter_mut() {
+            if v == "0:a?" {
+                *v = json!("3:a?");
+            } else if v == "0:s?" {
+                *v = json!("3:s?");
+            }
+        }
+    }
 }
 
 fn golden_cmd_manifest(cmds: &mut [Value], i: usize) -> &mut Value {

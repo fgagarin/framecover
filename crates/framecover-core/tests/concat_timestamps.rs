@@ -1,6 +1,7 @@
-//! Timestamps of the MP4 concat fast path: the prepended preview must not
-//! disturb the source's DTS (B-frame delay), so the output keeps the source
-//! frame rate and gains exactly one frame.
+//! Inserted preview frames: the concat fast path must not disturb the
+//! source's DTS (B-frame delay), and the full re-encode must insert the poster
+//! as an extra frame too, so outputs keep the source frame rate and gain
+//! exactly one frame.
 
 mod common;
 mod support;
@@ -355,4 +356,193 @@ fn resave_repairs_legacy_squashed_file() {
     assert_shifted_by_one_frame(&source, &legacy, 512);
     let video = FfprobeVideoLoader.load(&legacy).unwrap();
     assert_eq!(video.thumbnail_frame_number, Some(75));
+}
+
+// --- Full re-encode fallback ------------------------------------------------
+
+fn stream_duration_secs(path: &Path, stream: &str) -> f64 {
+    let v = ffprobe_json(&["-select_streams", stream, "-show_streams"], path);
+    v["streams"][0]["duration"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap()
+}
+
+/// Mean colour of decoded frame `n` of the first playable video stream.
+fn frame_mean(path: &Path, n: usize) -> [f64; 3] {
+    let info = framecover_core::probe::probe(path).unwrap();
+    let s = info.first_playable_video().unwrap();
+    let (w, h) = (s.width.unwrap(), s.height.unwrap());
+    let select = format!("select=eq(n\\,{n})");
+    let map = format!("0:{}", s.index);
+    let out = ffmpeg::ffmpeg([
+        "-v",
+        "error",
+        "-i",
+        path.to_str().unwrap(),
+        "-map",
+        &map,
+        "-vf",
+        &select,
+        "-frames:v",
+        "1",
+        "-f",
+        "rawvideo",
+        "-pix_fmt",
+        "rgb24",
+        "-",
+    ])
+    .unwrap();
+    support::mean(&RgbImage::from_raw(w, h, out.stdout).unwrap())
+}
+
+fn assert_close(actual: [f64; 3], expected: [f64; 3], what: &str) {
+    assert!(
+        actual
+            .iter()
+            .zip(&expected)
+            .all(|(a, e)| (a - e).abs() < 8.0),
+        "{what}: {actual:?} vs {expected:?}"
+    );
+}
+
+#[test]
+fn reencode_inserts_preview_instead_of_overwriting_frame_zero() {
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("yuv444p.mp4");
+    common::generate_video(
+        &source,
+        5,
+        320,
+        240,
+        &["-c:v", "libx264", "-c:a", "aac", "-pix_fmt", "yuv444p"],
+    );
+    let target = copy_of(&source, "target.mp4");
+    let video = FfprobeVideoLoader.load(&target).unwrap();
+    assert!(
+        FormatDispatchThumbnailWriter
+            .reencode_reason(&video)
+            .is_some()
+    );
+    let source_frame0 = frame_mean(&source, 0);
+
+    let result = save(&target, 2000);
+    assert_eq!(result.duration_shift_ms, 40);
+    assert_eq!(
+        support::frame_count(&target),
+        support::frame_count(&source) + 1
+    );
+    assert_regular(&target, packets(&target, "v:0")[0].duration);
+    assert_preview_first(&target);
+    // Frame 1 is the source's frame 0, not the poster.
+    assert_close(frame_mean(&target, 1), source_frame0, "frame 1");
+    assert_eq!(video_stream(&target)["avg_frame_rate"], "25/1");
+    let grown = stream_duration_secs(&target, "v:0") - stream_duration_secs(&source, "v:0");
+    assert!((grown - 0.04).abs() < 0.002, "video grew by {grown}");
+    let shift = audio_start_secs(&target) - audio_start_secs(&source);
+    assert!((shift - 0.04).abs() < 0.002, "audio shift {shift}");
+    let reloaded = FfprobeVideoLoader.load(&target).unwrap();
+    assert_eq!(reloaded.thumbnail_position_ms, Some(2040));
+    assert_eq!(reloaded.thumbnail_frame_number, Some(51));
+
+    // A re-save replaces the inserted frame instead of adding another.
+    let frames = support::frame_count(&target);
+    let blue = RgbImage::from_pixel(320, 240, image::Rgb([20, 20, 240]));
+    let result = FormatDispatchThumbnailWriter.write(&reloaded, &blue, Some(3000), None);
+    assert!(result.success, "{:?}", result.error_message);
+    assert_eq!(result.duration_shift_ms, 0);
+    assert_eq!(support::frame_count(&target), frames);
+    let [r, g, b] = frame_mean(&target, 0);
+    assert!(b > 200.0 && r < 60.0 && g < 60.0, "first frame {r} {g} {b}");
+    assert_close(
+        frame_mean(&target, 1),
+        source_frame0,
+        "frame 1 after re-save",
+    );
+    let shift = audio_start_secs(&target) - audio_start_secs(&source);
+    assert!(
+        (shift - 0.04).abs() < 0.002,
+        "audio shift after re-save {shift}"
+    );
+    let reloaded = FfprobeVideoLoader.load(&target).unwrap();
+    assert_eq!(reloaded.thumbnail_position_ms, Some(3000));
+    assert_eq!(reloaded.thumbnail_frame_number, Some(75));
+}
+
+/// Earlier versions' re-encode painted the poster over frame 0 inside the
+/// first GOP; such a preview cannot be stripped by stream copy, so a re-save
+/// re-encodes and trims it instead of growing the file or breaking decoding.
+#[test]
+fn resave_of_legacy_overlay_reencode_trims_first_frame() {
+    let dir = tempfile::tempdir().unwrap();
+    let source = common::sample_video(dir.path());
+    let poster = dir.path().join("poster.png");
+    std::fs::write(&poster, imaging::encode_png(&red()).unwrap()).unwrap();
+    let cover = dir.path().join("cover.jpg");
+    std::fs::write(&cover, imaging::cover_jpeg(&red()).unwrap()).unwrap();
+    let legacy = dir.path().join("legacy.mp4");
+    let p = |p: &Path| p.to_str().unwrap().to_owned();
+    ffmpeg::ffmpeg([
+        "-y",
+        "-i",
+        &p(&source),
+        "-loop",
+        "1",
+        "-i",
+        &p(&poster),
+        "-i",
+        &p(&cover),
+        "-filter_complex",
+        "[1:v][0:v]scale2ref=flags=lanczos[poster][base];\
+         [base][poster]overlay=shortest=1:enable='eq(n,0)'[v]",
+        "-map",
+        "[v]",
+        "-map",
+        "0:a?",
+        "-map",
+        "2:v",
+        "-c:v:0",
+        "libx264",
+        "-preset:v:0",
+        "veryfast",
+        "-pix_fmt:v:0",
+        "yuv420p",
+        "-c:v:1",
+        "copy",
+        "-disposition:v:1",
+        "attached_pic",
+        "-c:a",
+        "copy",
+        "-f",
+        "mp4",
+        &p(&legacy),
+    ])
+    .unwrap();
+    mp4_tags::write_thumbnail_source(&legacy, 50, 2000).unwrap();
+    let frames = support::frame_count(&legacy);
+    let video = FfprobeVideoLoader.load(&legacy).unwrap();
+    assert!(video.has_inserted_preview());
+    assert!(
+        FormatDispatchThumbnailWriter
+            .reencode_reason(&video)
+            .unwrap()
+            .contains("cannot be removed without re-encoding")
+    );
+
+    let blue = RgbImage::from_pixel(320, 240, image::Rgb([20, 20, 240]));
+    let result = FormatDispatchThumbnailWriter.write(&video, &blue, Some(3000), None);
+    assert!(result.success, "{:?}", result.error_message);
+    assert_eq!(result.duration_shift_ms, 0);
+    assert_eq!(support::frame_count(&legacy), frames);
+    let [r, g, b] = frame_mean(&legacy, 0);
+    assert!(b > 200.0 && r < 60.0 && g < 60.0, "first frame {r} {g} {b}");
+    assert_close(
+        frame_mean(&legacy, 1),
+        frame_mean(&source, 1),
+        "frame 1 is still the source's frame 1",
+    );
+    // The new output can be re-saved by stream copy again.
+    let video = FfprobeVideoLoader.load(&legacy).unwrap();
+    assert_eq!(FormatDispatchThumbnailWriter.reencode_reason(&video), None);
 }

@@ -210,6 +210,11 @@ with a comment per fix) and compares everything else against Python.
   repaired with `-bsf:v:0 setts=…`, so outputs keep the source frame rate and
   duration + one frame. The loader also reads already-drifted files with
   `r_frame_rate` (see `Stream::effective_rate`).
+- Behaviour 2 (re-encode overwrites frame 0): the re-encode inserts the poster
+  as an extra first frame (`concat` filter), shifts audio/subtitles with
+  `-itsoffset`, reports `duration_shift_ms` 40 and shifted tags (2040 / 51),
+  and forces a keyframe on the first source frame. A re-save trims the old
+  preview (or strips it by stream copy when the file is concat-eligible).
 - Behaviour 4 (default stream selection): MKV and AVI remuxes use `-map 0`;
   `save_mkv_two_audio` keeps both audio tracks. MKV re-saves drop only
   cover-named attachments (`cover.jpg`, `cover.png`, `cover.jpeg`,

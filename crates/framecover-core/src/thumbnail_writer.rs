@@ -6,7 +6,8 @@
 //!   preview is stripped first so repeated saves keep the duration. The
 //!   output's leading DTS are repaired so B-frame delay (or squashed DTS from
 //!   earlier versions) cannot skew the frame rate. Falls back
-//!   to a full H.264 re-encode that overlays the frame on frame 0.
+//!   to a full H.264 re-encode that inserts the frame the same way (one extra
+//!   first frame; a previously inserted one is trimmed on re-save).
 //! * MOV: always the full re-encode path.
 //! * MKV: all streams re-muxed, a previous cover-named attachment replaced by
 //!   a new `cover.jpg` attached with `-attach`.
@@ -636,7 +637,23 @@ impl ThumbnailWriter for FormatDispatchThumbnailWriter {
         if extension(&video.path) != ".mp4" {
             return Some("The fast copy path supports .mp4 files only.".to_owned());
         }
-        match concat_decision_for(&video.path, video.has_inserted_preview()) {
+        let replace = video.has_inserted_preview();
+        match concat_decision_for(&video.path, replace) {
+            Ok((Some(_), _))
+                if replace
+                    && !probe::probe(&video.path)
+                        .ok()
+                        .and_then(|i| i.first_playable_video().map(|s| s.index))
+                        .is_some_and(|i| {
+                            second_packet_is_keyframe(&video.path, i).unwrap_or(false)
+                        }) =>
+            {
+                Some(
+                    "The previous preview frame is part of the video's first group of \
+                     pictures and cannot be removed without re-encoding."
+                        .to_owned(),
+                )
+            }
             Ok((_, reason)) => reason,
             // Python lets the PyAV error propagate; the UI only shows text.
             Err(err) => Some(format!("Could not inspect the video streams: {err}")),
@@ -712,8 +729,9 @@ struct Mp4Temps {
 
 /// Embed a preview and cover art into an MP4 or MOV file.
 ///
-/// Returns the milliseconds the concat fast path shifted every original frame
-/// forward by prepending a new frame; 0 for replacements and re-encodes.
+/// Returns the milliseconds every original frame was shifted forward by
+/// prepending a new frame (concat or re-encode); 0 when an
+/// existing preview was replaced.
 fn embed_mp4_mov(
     video_path: &Path,
     jpeg_bytes: &[u8],
@@ -727,9 +745,26 @@ fn embed_mp4_mov(
         video_ext = ".mp4".to_owned();
     }
     stages.start("Inspecting video streams");
-    let replace_existing_preview = opts.replace_existing_preview && video_ext == ".mp4";
+    let info = probe::probe(video_path)?;
+    let replace_existing_preview = opts.replace_existing_preview;
+    let reencode = ReencodeParams::new(&info, video_path, opts.frame_step_ms)?;
     let concat_params = if video_ext == ".mp4" {
-        concat_decision_for(video_path, replace_existing_preview)?.0
+        concat_decision(&info, video_path, replace_existing_preview)
+            .0
+            .filter(|_| {
+                // Stripping the old preview by stream copy needs the next
+                // packet to be a keyframe; otherwise re-encode (and trim).
+                let strippable = !replace_existing_preview
+                    || second_packet_is_keyframe(video_path, reencode.index).unwrap_or(false);
+                if !strippable {
+                    debug!(
+                        "concat fast path skipped for '{}': the previous preview frame is \
+                         referenced by later frames",
+                        video_path.display()
+                    );
+                }
+                strippable
+            })
     } else {
         debug!(
             "concat fast path skipped for '{}': extension {} is not .mp4",
@@ -755,7 +790,7 @@ fn embed_mp4_mov(
     atomic_replace(
         video_path,
         |tmp_video_path| {
-            if let Some(params) = &concat_params
+            let frame_duration = if let Some(params) = &concat_params
                 && write_concat(
                     video_path,
                     tmp_video_path,
@@ -764,90 +799,183 @@ fn embed_mp4_mov(
                     params,
                     stages,
                     replace_existing_preview,
-                )?
-            {
-                // Initial saves prepend a frame; replacements keep the duration.
-                shift_ms = if replace_existing_preview {
-                    0
-                } else {
-                    (params.frame_duration * 1000.0).round_ties_even() as u64
-                };
-                let shifted_position_ms = opts.position_ms.map(|p| p + shift_ms);
-                let shifted_frame_number = match shifted_position_ms {
-                    Some(p) => Some(py_round_div(p, opts.frame_step_ms.max(1))),
-                    None => opts.frame_number,
-                };
-                if opts.write_mp4_covr {
-                    stages.start("Writing cover art");
-                    mp4_tags::write_covr(tmp_video_path, jpeg_bytes)?;
-                }
-                stages.start("Writing frame metadata");
-                write_source_metadata(tmp_video_path, shifted_frame_number, shifted_position_ms)?;
-                return Ok(());
-            }
-
-            info!(
-                "Full re-encode required for '{}' (concat fast path unavailable)",
-                video_path.display()
-            );
-            stages.start("Encoding video");
-            run_ffmpeg(args![
-                "-y",
-                "-i",
-                video_path,
-                "-loop",
-                "1",
-                "-i",
-                temps.frame,
-                "-i",
-                temps.cover,
-                "-filter_complex",
-                "[1:v][0:v]scale2ref=flags=lanczos[poster][base];\
-                 [base][poster]overlay=shortest=1:enable='eq(n,0)'[v]",
-                "-map",
-                "[v]",
-                "-map",
-                "0:a?",
-                "-map",
-                "0:s?",
-                "-map",
-                "2:v",
-                "-map_metadata",
-                "0",
-                "-map_chapters",
-                "0",
-                "-c:v:0",
-                "libx264",
-                "-preset:v:0",
-                "veryfast",
-                "-crf:v:0",
-                "23",
-                "-pix_fmt:v:0",
-                "yuv420p",
-                "-c:v:1",
-                "copy",
-                "-disposition:v:1",
-                "attached_pic",
-                "-c:a",
-                "copy",
-                "-c:s",
-                "copy",
-                "-f",
-                output_format,
-                tmp_video_path,
-            ])?;
+                )? {
+                params.frame_duration
+            } else {
+                info!(
+                    "Full re-encode required for '{}' (concat fast path unavailable)",
+                    video_path.display()
+                );
+                stages.start("Encoding video");
+                run_ffmpeg(reencode_args(
+                    video_path,
+                    tmp_video_path,
+                    &temps,
+                    output_format,
+                    &reencode,
+                    replace_existing_preview,
+                ))?;
+                reencode.frame_duration
+            };
+            // Initial saves prepend a frame; replacements keep the duration.
+            shift_ms = if replace_existing_preview {
+                0
+            } else {
+                (frame_duration * 1000.0).round_ties_even() as u64
+            };
+            let shifted_position_ms = opts.position_ms.map(|p| p + shift_ms);
+            let shifted_frame_number = match shifted_position_ms {
+                Some(p) => Some(py_round_div(p, opts.frame_step_ms.max(1))),
+                None => opts.frame_number,
+            };
             if opts.write_mp4_covr {
                 stages.start("Writing cover art");
                 mp4_tags::write_covr(tmp_video_path, jpeg_bytes)?;
             }
             stages.start("Writing frame metadata");
-            write_source_metadata(tmp_video_path, opts.frame_number, opts.position_ms)
+            write_source_metadata(tmp_video_path, shifted_frame_number, shifted_position_ms)
         },
         false,
     )?;
     stages.start("Cleaning up temporary files");
     drop(temps);
     Ok(shift_ms)
+}
+
+/// Source properties the full re-encode needs to insert a preview frame.
+#[derive(Debug, Clone, PartialEq)]
+struct ReencodeParams {
+    /// Input index of the playable video stream.
+    index: usize,
+    width: u32,
+    height: u32,
+    /// Sample aspect ratio applied to both segments (`1/1` if unknown), as
+    /// the `concat` filter requires identical link parameters.
+    sar: String,
+    /// Effective frame rate as `num/den`; the preview lasts one such frame.
+    frame_rate: String,
+    frame_duration: f64,
+}
+
+impl ReencodeParams {
+    fn new(info: &ProbeInfo, path: &Path, frame_step_ms: u64) -> Result<Self> {
+        let stream = info
+            .first_playable_video()
+            .ok_or_else(|| Error::NoVideoStream(path.to_path_buf()))?;
+        let rate = stream.effective_rate().unwrap_or(Rational {
+            num: 1000,
+            den: frame_step_ms.max(1) as i64,
+        });
+        let sar = stream
+            .sample_aspect_ratio()
+            .unwrap_or(Rational { num: 1, den: 1 });
+        Ok(Self {
+            index: stream.index,
+            width: stream.width.unwrap_or(0),
+            height: stream.height.unwrap_or(0),
+            sar: format!("{}/{}", sar.num, sar.den),
+            frame_rate: format!("{}/{}", rate.num, rate.den),
+            frame_duration: 1.0 / rate.to_f64(),
+        })
+    }
+}
+
+/// Full H.264 re-encode that inserts the poster as an extra first frame:
+/// the poster (scaled to the video size) is a one-frame segment followed by
+/// the source video in a `concat` filter, so no source frame is lost. Audio
+/// and subtitles are copied from a second, `-itsoffset`-delayed opening of the
+/// source so they stay in sync. When replacing a previously inserted preview,
+/// the source's first frame is trimmed instead and nothing is delayed.
+fn reencode_args(
+    video_path: &Path,
+    output_path: &Path,
+    temps: &Mp4Temps,
+    output_format: &str,
+    params: &ReencodeParams,
+    replace_existing_preview: bool,
+) -> Vec<OsString> {
+    let ReencodeParams {
+        index,
+        width,
+        height,
+        sar,
+        frame_rate,
+        frame_duration,
+    } = params;
+    let trim = if replace_existing_preview {
+        "trim=start_frame=1,"
+    } else {
+        ""
+    };
+    let graph = format!(
+        "[1:v]scale={width}:{height}:flags=lanczos,setsar={sar},trim=end_frame=1[poster];\
+         [0:{index}]{trim}setpts=PTS-STARTPTS,setsar={sar}[base];\
+         [poster][base]concat=n=2:v=1:a=0[v]"
+    );
+    let mut args = args![
+        "-y",
+        "-i",
+        video_path,
+        "-loop",
+        "1",
+        "-framerate",
+        frame_rate,
+        "-i",
+        temps.frame,
+        "-i",
+        temps.cover,
+    ];
+    let side_input = if replace_existing_preview {
+        "0"
+    } else {
+        args.extend(args![
+            "-itsoffset",
+            format_g(*frame_duration, 12),
+            "-i",
+            video_path
+        ]);
+        "3"
+    };
+    args.extend(args![
+        "-filter_complex",
+        graph,
+        "-map",
+        "[v]",
+        "-map",
+        format!("{side_input}:a?"),
+        "-map",
+        format!("{side_input}:s?"),
+        "-map",
+        "2:v",
+        "-map_metadata",
+        "0",
+        "-map_chapters",
+        "0",
+        "-c:v:0",
+        "libx264",
+        "-preset:v:0",
+        "veryfast",
+        "-crf:v:0",
+        "23",
+        "-pix_fmt:v:0",
+        "yuv420p",
+        // The first source frame starts a new GOP, so a later save can strip
+        // the preview by stream copy (concat fast path replace).
+        "-force_key_frames:v:0",
+        "expr:lte(n,1)",
+        "-c:v:1",
+        "copy",
+        "-disposition:v:1",
+        "attached_pic",
+        "-c:a",
+        "copy",
+        "-c:s",
+        "copy",
+        "-f",
+        output_format,
+        output_path,
+    ]);
+    args
 }
 
 fn write_source_metadata(
@@ -952,6 +1080,37 @@ fn concat_head(manifest: &Path) -> Result<Vec<PacketTs>> {
     let parsed: Packets = serde_json::from_slice(&out.stdout)
         .map_err(|e| Error::Other(format!("invalid ffprobe packet output: {e}")))?;
     Ok(parsed.packets)
+}
+
+/// Whether the second packet (decode order) of stream `index` is a keyframe,
+/// i.e. dropping the first packet leaves a decodable stream. True for files
+/// written by the concat fast path or the current re-encode (which forces a
+/// keyframe after the preview); false for outputs of earlier re-encodes,
+/// whose following frames reference the poster frame.
+fn second_packet_is_keyframe(path: &Path, index: usize) -> Result<bool> {
+    #[derive(serde::Deserialize)]
+    struct Packet {
+        #[serde(default)]
+        flags: String,
+    }
+    #[derive(serde::Deserialize)]
+    struct Packets {
+        #[serde(default)]
+        packets: Vec<Packet>,
+    }
+    let mut cmd = crate::ffmpeg::command(crate::ffmpeg::Tool::Ffprobe)?;
+    cmd.args(["-v", "error", "-select_streams"])
+        .arg(index.to_string())
+        .args(["-read_intervals", "%+#2", "-show_entries", "packet=flags"])
+        .args(["-of", "json", "-i"])
+        .arg(path);
+    let out = crate::ffmpeg::run(&mut cmd)?;
+    let parsed: Packets = serde_json::from_slice(&out.stdout)
+        .map_err(|e| Error::Other(format!("invalid ffprobe packet output: {e}")))?;
+    Ok(parsed
+        .packets
+        .get(1)
+        .is_some_and(|p| p.flags.starts_with('K')))
 }
 
 /// Rewrite of the first `count` packets' DTS to

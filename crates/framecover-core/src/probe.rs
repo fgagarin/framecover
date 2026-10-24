@@ -103,6 +103,8 @@ pub struct Stream {
     #[serde(default)]
     nb_frames: Option<String>,
     #[serde(default)]
+    sample_aspect_ratio: Option<String>,
+    #[serde(default)]
     pub disposition: Disposition,
     #[serde(default)]
     pub tags: HashMap<String, String>,
@@ -163,6 +165,14 @@ impl Stream {
     /// `avg_frame_rate` with `r_frame_rate`.
     pub fn has_rate_drift(&self) -> bool {
         matches!((self.average_rate(), self.base_rate()), (Some(a), Some(b)) if rate_drifted(a, b))
+    }
+
+    /// Sample (pixel) aspect ratio, `None` if unknown (`0:1`, `N/A`).
+    pub fn sample_aspect_ratio(&self) -> Option<Rational> {
+        self.sample_aspect_ratio
+            .as_deref()
+            .and_then(|s| Rational::parse(&s.replace(':', "/")))
+            .filter(|r| r.num > 0 && r.den > 0)
     }
 
     /// Number of frames (`nb_frames`), if the container reports it.

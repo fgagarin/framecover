@@ -328,11 +328,12 @@ fn existing_foreign_cover_forces_full_reencode() {
     );
     let (result, events) = write_collecting(&video, &red(), Some(2000));
     assert!(result.success, "{:?}", result.error_message);
-    assert_eq!(result.duration_shift_ms, 0);
+    // The re-encode inserts the poster as an extra frame, like the fast path.
+    assert_eq!(result.duration_shift_ms, 40);
     assert!(started(&events).iter().any(|s| s == "Encoding video"));
     let reopened = support::load(&path);
-    assert_eq!(reopened.thumbnail_position_ms, Some(2000));
-    assert_eq!(reopened.thumbnail_frame_number, Some(50));
+    assert_eq!(reopened.thumbnail_position_ms, Some(2040));
+    assert_eq!(reopened.thumbnail_frame_number, Some(51));
 }
 
 #[test]
