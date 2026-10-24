@@ -2,9 +2,11 @@
 
 Many video players and file managers generate a thumbnail by grabbing the first frame of the video — which is often a black screen, a title card, or a fade-in. This tool lets you scrub to any frame you like and embed it as the video's cover art, so the thumbnail actually shows something meaningful.
 
-Built with Python 3.13, PySide6 (Qt6), and PyAV.
+A native desktop app written in Rust with a [Slint](https://slint.dev) user
+interface. Video work is done by a bundled [FFmpeg](https://ffmpeg.org).
 
-**Supported formats:** MP4, MOV, MKV, WebM, AVI, FLV
+**Supported formats:** MP4, MOV, MKV, WebM, AVI, FLV — other containers
+(M2TS, MTS, MPEG-TS, WMV, …) can be converted to MP4 first.
 
 ---
 
@@ -24,81 +26,36 @@ Built with Python 3.13, PySide6 (Qt6), and PyAV.
 
 ---
 
-## Quick start
+## Download
 
-```bash
-python3.13 -m venv .venv
-source .venv/bin/activate        # Linux / macOS
-# .venv\Scripts\activate         # Windows
-pip install -e ".[dev]"
-framecover
-```
+Get the latest build for Windows, macOS or Linux from the
+[releases page](https://github.com/fgagarin/framecover/releases/latest) or the
+[project site](https://fgagarin.github.io/framecover/). Nothing else needs to be
+installed: FFmpeg is included.
 
----
-
-## Requirements
-
-- Python 3.13+
-- [uv](https://github.com/astral-sh/uv) or `pip` (for environment setup)
-
-Dependency baseline: PySide6-Essentials 6.12.0, PyAV 19.0.2, Pillow 13.0.0,
-imageio-ffmpeg 0.6.0, and mutagen 1.48.1. Exact runtime and development versions
-are recorded in `uv.lock`; use `uv sync --frozen --extra dev` to reproduce them.
-The upgraded stack was validated on Windows with Python 3.14, including native
-PyInstaller 6.22.3 packaging and application-window initialization.
+- **Windows:** a single `framecover-<version>-windows.exe`. On first launch it
+  unpacks its FFmpeg into `%LOCALAPPDATA%\FrameCover\ffmpeg\` (a couple of
+  seconds, once per version).
+- **macOS:** `framecover.app` (universal: Apple Silicon and Intel) in a
+  `.tar.gz`. The app is not Developer ID signed or notarized, so macOS may ask
+  for approval in **System Settings > Privacy & Security** on first launch.
+  Only approve a download you trust from the official project releases.
+- **Linux:** a `.tar.gz` with the `framecover` binary next to `ffmpeg` and
+  `ffprobe`.
 
 ---
 
-## Setup
+## Using FrameCover
 
-### Create and activate a virtual environment
-
-```bash
-python3.13 -m venv .venv
-source .venv/bin/activate        # Linux / macOS
-# .venv\Scripts\activate         # Windows
-```
-
-### Install dependencies
-
-```bash
-pip install -e ".[dev]"
-```
-
-This installs the application along with all development tools (pytest, ruff, ty, pyinstaller).
-
-The GUI uses `PySide6-Essentials`, which provides the `PySide6` imports needed
-by the application and Qt tests without installing the Addons, WebEngine, or PDF
-packages. The full `PySide6` metapackage is not required.
-
-When migrating an existing environment from full PySide6, uninstalling its
-overlapping packages can remove shared bootstrap files. If Qt imports fail after
-`uv sync --frozen --extra dev`, restore the Essentials files:
-
-```bash
-uv sync --frozen --extra dev --reinstall-package pyside6-essentials --reinstall-package shiboken6
-```
-
----
-
-## Running the application
-
-```bash
-framecover
-```
-
-Or directly via the module:
-
-```bash
-python -m framecover.app
-```
-
-Typical workflow:
-
-1. Open a video file.
-2. Scrub the timeline to the frame you want.
+1. Open a video file (drag it onto the window, use **Ctrl+O**, or pass the path
+   on the command line: `framecover video.mp4`).
+2. Scrub the timeline or click the filmstrip to the frame you want; **Left** /
+   **Right** step one frame.
 3. Click **Save thumbnail** (or press **Ctrl+S**) to save a copy named
    `video-thumbnail.mp4`, leaving the original unchanged.
+
+Press **?** for all keyboard shortcuts. **About** in the footer shows version
+and licence information.
 
 ### Saving copies and overwriting originals
 
@@ -127,6 +84,17 @@ incomplete copy, but does not overwrite an existing file. If another application
 changes the destination during a save, recovery backups are retained whenever
 they cannot be restored safely; any recovery paths are included in the error.
 
+### How the thumbnail is stored
+
+For MP4 and MOV, FrameCover inserts the chosen frame as a new first frame
+(the rest of the video and audio are stream-copied and shift by one frame) and
+also attaches it as cover art, so players, file managers and messengers that
+use either the first frame or the embedded cover show it. Only that single
+frame is encoded when the video is H.264 or AV1 (8-bit 4:2:0); other codecs
+need a full re-encode, and the app tells you so before saving. MKV gets a
+`cover.jpg` attachment; AVI, WebM and FLV cannot hold cover art, so only the
+file manager's thumbnail cache is refreshed.
+
 ### Update checks
 
 On startup FrameCover asks GitHub, in the background, whether a newer release
@@ -135,23 +103,15 @@ window: a blue dot means you have the latest version, a green dot means an
 update is available. Click the indicator to check again. When a new version
 is available, the indicator shows its number; clicking it opens that version's
 GitHub release page, where you can read the changes and download it.
-The check sends only a
-single anonymous request to the GitHub API; no video information leaves your
-computer. If GitHub cannot be reached, the program keeps working normally and
-the status explains how to retry.
+The check sends only a single anonymous request to the GitHub API; no video
+information leaves your computer. If GitHub cannot be reached, the program keeps
+working normally and the status explains how to retry.
 
-Packaged builds include a trusted CA certificate bundle for HTTPS update checks,
-including on macOS without a separate Python installation. Certificate and
-hostname verification remain enabled. A certificate error is reported separately
-from a connection failure; check the computer's date and time or consult your
-network administrator if HTTPS filtering is in use.
-
-The macOS app is currently not Developer ID signed or notarized, so macOS may
-require explicit approval in **System Settings > Privacy & Security** on first
-launch. Only approve a download you trust from the official project releases.
-This launch approval is separate from HTTPS certificate verification; it does
-not repair update checks. You can check the project's releases page in your
-browser if the in-app check fails.
+HTTPS certificates are verified with the operating system's certificate store
+(so corporate HTTPS-filtering roots keep working), falling back to a bundled
+Mozilla root store. A certificate error is reported separately from a
+connection failure; check the computer's date and time or consult your network
+administrator if HTTPS filtering is in use.
 
 ### Convert other formats to MP4
 
@@ -160,157 +120,107 @@ offers to convert it to a separate MP4. Choose **Yes**, then choose where to sav
 the MP4. Existing destinations require confirmation in the save dialog; the
 source file can never be used as the destination.
 
-Conversion runs in the background with a stage indicator. FFmpeg first attempts
-to remux the first playable video and all audio tracks without re-encoding.
-The result must also support stream-copy preview insertion. If the streams cannot
-be stored in MP4 or are incompatible with that path (for example MPEG-2 or HEVC),
-the application checks FFmpeg's available encoders and converts to compatible
-H.264/AAC during conversion, rather than when saving the thumbnail.
-Re-encoding can take time and reduce
-quality. Subtitles, additional video streams, attachments, and data tracks are
-not transferred. Not every input codec or damaged file can be converted.
+Conversion runs in the background with a stage indicator. When the streams can
+be stored in MP4 as they are and support stream-copy preview insertion, FFmpeg
+remuxes the first playable video and all audio tracks without re-encoding.
+Otherwise (for example MPEG-2 or HEVC) the application converts to compatible
+H.264/AAC once, during conversion, rather than when saving the thumbnail.
+Re-encoding can take time and reduce quality. Subtitles, additional video
+streams, attachments, and data tracks are not transferred. Not every input codec
+or damaged file can be converted.
 
 The source is left untouched, and failed conversion does not replace an existing
 destination. On success, the MP4 opens automatically: select a frame and save its
-thumbnail as usual. Saving or replacing its preview encodes only the preview
-frame and concatenates it with the copied video; the main video is not re-encoded.
-Already supported containers keep their existing workflow.
+thumbnail as usual.
 
-FFmpeg is supplied by `imageio-ffmpeg`. To use another build with the required
-decoders and H.264/AAC encoders, set `IMAGEIO_FFMPEG_EXE` to its executable path
-before launching the application. Hardware encoders are tried only if advertised
-by that build; if a device cannot initialize, another available encoder is tried.
+To use a different FFmpeg build, set `FRAMECOVER_FFMPEG` and
+`FRAMECOVER_FFPROBE` to its executables before launching the application.
+Hardware H.264 encoders are tried only if advertised by that build; if a device
+cannot initialize, another available encoder is tried.
 
 ---
 
-## Running tests
+## Development
 
-All tests are under `tests/`. Activate the virtual environment first.
-
-### Run unit and integration tests
-
-```bash
-pytest tests/unit/ tests/integration/ -q
-```
-
-### Run with coverage (≥80% gate)
+Requirements: [Rust](https://rustup.rs) (stable, 1.92 or newer). On Linux, the
+Slint build needs `libfontconfig1-dev libxkbcommon-dev libxkbcommon-x11-dev
+libwayland-dev libx11-xcb-dev libxcb-shape0-dev libxcb-xfixes0-dev` (Debian/Ubuntu
+names). On Windows, the MSVC build tools.
 
 ```bash
-pytest --cov=framecover \
-       --cov-report=term-missing \
-       --cov-fail-under=80 \
-       tests/unit/ tests/integration/
+cargo xtask fetch-ffmpeg     # pinned FFmpeg for this OS into vendor/ffmpeg/<platform>/
+cargo run -p framecover      # run the app (optionally: -- path/to/video.mp4)
+cargo test --workspace       # unit, integration and golden tests (use the vendored FFmpeg)
+cargo fmt --all
+cargo clippy --workspace --all-targets -- -D warnings
+cargo bench -p framecover-core --bench frame_extraction
 ```
 
-### Run benchmarks
+The FFmpeg builds are pinned by URL and SHA-256 in `xtask/ffmpeg-pins.toml`
+(BtbN builds for Windows and Linux, Martin Riedl's builds for macOS). The same
+commands are available as `make` targets (`make help`).
+
+The frame-extraction benchmark keeps a 500 ms budget per extraction for SD,
+1080p and 4K video.
+
+### Project structure
+
+```
+crates/
+  framecover-core/   # no GUI: ffprobe loader, frame extractor, thumbnail writer,
+                     # safe save-copy, MP4 converter, MP4 tags, update checker,
+                     # OS thumbnail-cache integration (platform/)
+    tests/           # integration tests; tests/golden/ holds reference results
+                     # captured from the former Python implementation
+  framecover-app/    # the `framecover` binary
+    ui/              # Slint UI
+    src/             # controller (state machine), workers, services wiring,
+                     # settings, embedded-FFmpeg unpacking
+xtask/               # fetch-ffmpeg, changelog, release, package
+licenses/            # FFmpeg notice and GPL text shipped with releases
+site/                # landing page
+```
+
+### Building a distribution
 
 ```bash
-pytest tests/benchmarks/ --benchmark-only
+cargo xtask package windows   # release-assets/framecover-<v>-windows.exe (FFmpeg embedded)
+cargo xtask package linux     # release-assets/framecover-<v>-linux.tar.gz
+cargo xtask package macos     # release-assets/framecover-<v>-macos.tar.gz (universal .app)
 ```
 
-The benchmarks enforce a 500 ms maximum per extraction for SD, 1080p, and 4K.
-Frame extraction uses up to four decoder threads to accelerate seeking.
+Each target must be built on its own OS (macOS builds both Apple targets and
+joins them with `lipo`). Packaging fetches the pinned FFmpeg if needed.
 
-Linux CI tests use the distribution's FFmpeg via `IMAGEIO_FFMPEG_EXE=ffmpeg`:
-the bundled Linux FFmpeg 7.0.2 can crash while reading MPEG-TS inputs.
+### Changelog and releases
 
-### Via Makefile
-
-```bash
-make test        # unit + integration tests
-make coverage    # tests with >=80% coverage gate
-make lint        # ruff linter
-make typecheck   # ty check (src/ and scripts/)
-```
-
----
-
-## Building a distribution
-
-Single-file executables are produced via [PyInstaller](https://pyinstaller.org).
-
-```bash
-make dist-linux    # → dist/linux/framecover
-make dist-macos    # → dist/macos/framecover.app
-make dist-windows  # → dist/windows/framecover.exe
-```
-
-Or manually:
-
-```bash
-pyinstaller pyinstaller.spec --distpath dist/linux --workpath build/linux --noconfirm
-```
-
-Qt plugins and libraries are collected by PyInstaller's hooks for the imported
-Qt modules. Do not collect the entire `PySide6` data directory: it also bundles
-unused WebEngine, QML, and development resources.
-
----
-
-## Changelog and releases
-
-Development dependencies include `git-changelog`. Commit messages follow
-[Conventional Commits](https://www.conventionalcommits.org/):
+Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/):
 `feat: ...`, `fix: ...`, and `feat!: ...` or a `BREAKING CHANGE:` footer.
+`CHANGELOG.md` is generated with [git-cliff](https://git-cliff.org)
+(`cargo install git-cliff --locked`).
 
 ```bash
-make changelog                 # regenerate CHANGELOG.md, including Unreleased
-make release VERSION=0.2.0     # explicit stable version (v0.2.0 also accepted)
-make release                  # let git-changelog calculate the next version
+cargo xtask changelog                       # regenerate CHANGELOG.md, including Unreleased
+cargo xtask release create --version 0.2.0  # explicit version
+cargo xtask release create                  # let git-cliff calculate the next version
 ```
 
-`make release` requires a clean working tree, a checked-out branch and full Git
-history. It generates the changelog, synchronizes the project/package/lockfile
-versions, creates a `chore(release): vX.Y.Z` commit and an annotated `vX.Y.Z` tag.
-It does **not** push or publish automatically. Review the result, then run:
+`release create` requires a clean working tree. It bumps the workspace version
+(and `Cargo.lock`), regenerates the changelog, creates a `chore(release): vX.Y.Z`
+commit and an annotated `vX.Y.Z` tag. It does **not** push. Review the result,
+then run:
 
 ```bash
 git push --atomic origin HEAD refs/tags/v0.2.0
 ```
 
-Without `VERSION`, version calculation is delegated to `git-changelog`:
-features bump minor, fixes bump patch, and breaking changes bump major
-(for 0.x versions, git-changelog's default zero-version rules apply).
-Before the first version tag, git-changelog determines the initial version;
-use `VERSION` to select a different initial release. Only stable `X.Y.Z` versions
-are supported, and existing versions cannot be released again.
-
 Pushing a `vX.Y.Z` tag triggers the release workflow. It validates the tag against
-the project, package and lockfile versions, generates the full changelog and notes
-for that version, then builds natively on Linux, macOS and Windows. After **all
-three builds succeed**, it publishes a GitHub Release containing:
-
-- Linux executable in a `.tar.gz` archive.
-- macOS `.app` bundle in a `.tar.gz` archive (preserving executable permissions).
-- Windows `.exe`.
-- Full `CHANGELOG.md`, with the current version's changes in the release body.
-
-The normal branch/PR CI remains separate. Version numbers in the macOS bundle
-are read from `pyproject.toml`. GitHub Actions uses `GITHUB_TOKEN` with write
-permission only in the publication job; no personal token is required.
-
-If a local release command fails, inspect `git status` before retrying: generated
-files or a completed release commit can remain, but the command never pushes.
-No release is created while merely installing these tools.
-
----
-
-## Project structure
-
-```
-src/
-  framecover/
-    app.py          # Entry point
-    models.py       # VideoFile, VideoFormat, TimelinePosition
-    exceptions.py   # Domain exceptions
-    core/           # Video loading, frame extraction, thumbnail writing
-    platform/       # OS-specific cache invalidation (Linux, macOS, Windows)
-    ui/             # PySide6 widgets (MainWindow, TimelineWidget, workers)
-tests/
-  unit/             # Unit tests
-  integration/      # Integration tests (real video files via PyAV)
-  benchmarks/       # pytest-benchmark frame extraction perf tests
-```
+the workspace and lockfile versions, generates the changelog and notes for that
+version, then builds natively on Linux, macOS and Windows. After **all three
+builds succeed**, it publishes a GitHub Release containing the three assets above
+and the full `CHANGELOG.md`, with the current version's changes in the release
+body. Asset names stay `framecover-<version>-<platform>.<ext>`: the website and
+the in-app update check rely on them.
 
 ---
 
@@ -329,18 +239,17 @@ itself change. It can also be run manually from the Actions tab on `main`.
 The download buttons resolve versioned platform assets through GitHub's public
 `releases/latest` API, so new releases do not require a site rebuild. If JavaScript
 is disabled, the API is unavailable, or an asset is missing, the buttons fall back
-to the latest release page. Downloads become available after the first stable
-release is published.
+to the latest release page.
 
 To preview locally, copy the contents of `site/` and the root `application.png`,
 `before.png`, `after.png`, and `icon.png` into one temporary directory, then serve
-that directory with `python -m http.server`.
+that directory with any static file server.
 
 ---
 
-## Code quality
+## Licence
 
-```bash
-ruff check src/ tests/ scripts/    # linting
-ty check                          # type checking (src/ and scripts/)
-```
+FrameCover is MIT-licensed (see `LICENSE`). Release builds bundle unmodified
+FFmpeg executables, which are licensed under the GNU GPL v3 — see
+`licenses/FFMPEG-NOTICE.txt`. The user interface uses Slint under the Slint
+Royalty-free License 2.0.
