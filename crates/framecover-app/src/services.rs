@@ -3,17 +3,18 @@
 //! The controller and workers only see the traits in this module (plus the
 //! core's own `VideoLoader`, `FrameExtractor` and `ThumbnailWriter`, which
 //! already exist as stable contracts). Concrete core implementations are
-//! connected in exactly one place, [`Services::production`]. Anything the
-//! core does not provide yet is bridged by a small shim marked `// WIRE:`;
-//! replace each shim with the real core call once it lands.
+//! connected in exactly one place, [`Services::production`].
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use framecover_core::converter::FfmpegVideoConverter;
 use framecover_core::frames::{FfmpegFrameExtractor, FrameExtractor};
 use framecover_core::loader::{FfprobeVideoLoader, VideoLoader};
+use framecover_core::platform;
 use framecover_core::thumbnail_writer::{FormatDispatchThumbnailWriter, ThumbnailWriter};
-use framecover_core::{ApplyError, ApplyResult, Error, ProgressFn, UpdateInfo, VideoFile};
+use framecover_core::update_checker::{GitHubUpdateChecker, UpdateChecker as CoreChecker};
+use framecover_core::{ApplyResult, Error, ProgressFn, UpdateInfo, VideoFile};
 use image::RgbImage;
 
 /// Copy-first saving: write a copy of `video` with `thumbnail` embedded to
@@ -86,8 +87,8 @@ impl Services {
             writer: Arc::new(FormatDispatchThumbnailWriter),
             copier: Arc::new(CoreCopySaver),
             converter: Arc::new(CoreConverter),
-            update_checker: Some(Arc::new(CoreUpdateChecker)),
-            invalidator: Arc::new(CoreCacheInvalidator),
+            update_checker: Some(Arc::new(CoreUpdateChecker(GitHubUpdateChecker::new()))),
+            invalidator: Arc::new(CoreCacheInvalidator(platform::get_cache_invalidator())),
             desktop: Arc::new(CoreDesktop),
         }
     }
@@ -95,13 +96,11 @@ impl Services {
 
 /// Windows taskbar grouping / icon identity (`FrameCover.Application`).
 pub fn set_app_user_model_id() {
-    // WIRE: replace with `framecover_core::platform::set_app_user_model_id()`.
-    // Until then the taskbar groups the app under the executable path, which
-    // is harmless.
+    framecover_core::platform::set_app_user_model_id();
 }
 
 // ---------------------------------------------------------------------------
-// Adapters over core functions. Bodies marked WIRE are temporary shims.
+// Adapters over core functions.
 // ---------------------------------------------------------------------------
 
 struct CoreCopySaver;
@@ -109,19 +108,22 @@ struct CoreCopySaver;
 impl CopySaver for CoreCopySaver {
     fn save_copy(
         &self,
-        _writer: &dyn ThumbnailWriter,
-        _video: &VideoFile,
-        _thumbnail: &RgbImage,
-        _destination: &Path,
-        _overwrite: bool,
-        _position_ms: Option<u64>,
-        _on_progress: Option<ProgressFn<'_>>,
+        writer: &dyn ThumbnailWriter,
+        video: &VideoFile,
+        thumbnail: &RgbImage,
+        destination: &Path,
+        overwrite: bool,
+        position_ms: Option<u64>,
+        on_progress: Option<ProgressFn<'_>>,
     ) -> ApplyResult {
-        // WIRE: framecover_core::save_copy::save_copy(
-        //     writer, video, thumbnail, destination, overwrite, position_ms, on_progress)
-        ApplyResult::failure(
-            ApplyError::Unexpected,
-            "Saving a copy is not available in this build yet (core save_copy is not wired).",
+        framecover_core::save_copy::save_copy(
+            writer,
+            video,
+            thumbnail,
+            destination,
+            overwrite,
+            position_ms,
+            on_progress,
         )
     }
 }
@@ -131,45 +133,28 @@ struct CoreConverter;
 impl VideoConverter for CoreConverter {
     fn convert(
         &self,
-        _source: &Path,
-        _destination: &Path,
-        _overwrite: bool,
-        _on_progress: &mut dyn FnMut(&str),
+        source: &Path,
+        destination: &Path,
+        overwrite: bool,
+        on_progress: &mut dyn FnMut(&str),
     ) -> Result<PathBuf, Error> {
-        // WIRE: framecover_core::converter::FfmpegVideoConverter::default()
-        //     .convert(source, destination, overwrite, on_progress)
-        // (adapt the progress callback type if the core one differs).
-        Err(Error::Conversion(
-            "MP4 conversion is not available in this build yet (core converter is not wired)."
-                .to_owned(),
-        ))
+        FfmpegVideoConverter.convert(source, destination, overwrite, Some(on_progress))
     }
 }
 
-struct CoreUpdateChecker;
+struct CoreUpdateChecker(GitHubUpdateChecker);
 
 impl UpdateChecker for CoreUpdateChecker {
-    fn check(&self, _current_version: &str) -> Result<UpdateInfo, Error> {
-        // WIRE: framecover_core::update_checker::GitHubUpdateChecker::default()
-        //     .check(current_version)
-        Err(Error::UpdateCheck(
-            "Update checking is not available in this build yet. FrameCover keeps \
-working normally."
-                .to_owned(),
-        ))
+    fn check(&self, current_version: &str) -> Result<UpdateInfo, Error> {
+        CoreChecker::check(&self.0, current_version)
     }
 }
 
-struct CoreCacheInvalidator;
+struct CoreCacheInvalidator(Box<dyn platform::CacheInvalidator>);
 
 impl CacheInvalidator for CoreCacheInvalidator {
-    fn invalidate(&self, path: &Path, _thumbnail: Option<&RgbImage>) {
-        // WIRE: framecover_core::platform::get_cache_invalidator().invalidate(path, thumbnail)
-        // (create the invalidator once, e.g. store it in this struct).
-        log::debug!(
-            "thumbnail cache invalidation not wired yet for {}",
-            path.display()
-        );
+    fn invalidate(&self, path: &Path, thumbnail: Option<&RgbImage>) {
+        self.0.invalidate(path, thumbnail);
     }
 }
 
@@ -177,50 +162,13 @@ struct CoreDesktop;
 
 impl Desktop for CoreDesktop {
     fn reveal_in_file_manager(&self, path: &Path) {
-        // WIRE: framecover_core::platform::reveal_in_file_manager(path)
-        shim::reveal_in_file_manager(path);
-    }
-
-    fn open_url(&self, url: &str) -> bool {
-        // WIRE: framecover_core::platform::open_url(url)
-        shim::open_url(url)
-    }
-}
-
-/// Temporary process-spawning fallbacks used until the core platform module
-/// lands. Delete together with the WIRE shims above.
-mod shim {
-    use std::path::Path;
-    use std::process::Command;
-
-    pub fn reveal_in_file_manager(path: &Path) {
-        let result = if cfg!(windows) {
-            let mut arg = std::ffi::OsString::from("/select,");
-            arg.push(path.as_os_str());
-            Command::new("explorer.exe").arg(arg).spawn().map(drop)
-        } else if cfg!(target_os = "macos") {
-            Command::new("open").arg("-R").arg(path).spawn().map(drop)
-        } else {
-            let folder = path.parent().unwrap_or(path);
-            Command::new("xdg-open").arg(folder).spawn().map(drop)
-        };
-        if let Err(err) = result {
+        if let Err(err) = platform::reveal_in_file_manager(path) {
             log::warn!("could not reveal {}: {err}", path.display());
         }
     }
 
-    pub fn open_url(url: &str) -> bool {
-        let result = if cfg!(windows) {
-            Command::new("rundll32.exe")
-                .arg("url.dll,FileProtocolHandler")
-                .arg(url)
-                .spawn()
-        } else if cfg!(target_os = "macos") {
-            Command::new("open").arg(url).spawn()
-        } else {
-            Command::new("xdg-open").arg(url).spawn()
-        };
-        result
+    fn open_url(&self, url: &str) -> bool {
+        platform::open_url(url)
             .map_err(|err| log::warn!("could not open {url}: {err}"))
             .is_ok()
     }

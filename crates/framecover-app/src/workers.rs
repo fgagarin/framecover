@@ -405,3 +405,99 @@ pub(crate) mod tests {
         assert!(!in_guarded_section());
     }
 }
+
+/// End-to-end checks of the GUI's job bodies against the real core
+/// services and the vendored FFmpeg (no window involved).
+#[cfg(test)]
+mod production_tests {
+    use super::*;
+    use crate::controller::{default_copy_path, suggest_conversion_path};
+    use std::sync::Arc;
+
+    fn generate(path: &Path, extra: &[&str]) {
+        let mut args = vec![
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc=size=320x240:rate=25:duration=3",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:duration=3",
+        ];
+        args.extend_from_slice(extra);
+        args.push(path.to_str().unwrap());
+        framecover_core::ffmpeg::ffmpeg(&args).expect("generate fixture");
+    }
+
+    fn loaded(services: &Services, path: &Path) -> VideoFile {
+        match run_load(services, path) {
+            LoadOutcome::Loaded(video) => *video,
+            other => panic!("expected a loaded video, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn open_scrub_save_copy_and_reopen() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("clip.mp4");
+        generate(
+            &source,
+            &["-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac"],
+        );
+        let services = Services::production();
+
+        let video = loaded(&services, &source);
+        assert_eq!((video.width, video.height), (320, 240));
+        assert_eq!(services.writer.reencode_reason(&video), None);
+        let frame = run_extract(&services, &video, 1200).unwrap();
+        assert_eq!(frame.dimensions(), (320, 240));
+
+        let destination = default_copy_path(&source);
+        let job = SaveJob {
+            video: Arc::new(video),
+            thumbnail: Arc::new(frame),
+            position_ms: Some(1200),
+            destination: Some(destination.clone()),
+            overwrite: false,
+        };
+        let mut stages = Vec::new();
+        let result = run_apply(&services, &job, &mut |name, done| {
+            if done.is_none() {
+                stages.push(name.to_owned());
+            }
+        });
+        assert!(result.success, "{:?}", result.error_message);
+        assert!(stages.iter().any(|s| s == CACHE_STAGE), "{stages:?}");
+
+        let copy = loaded(&services, result.output_path.as_deref().unwrap());
+        assert!(copy.existing_thumbnail.is_some());
+        assert_eq!(
+            copy.thumbnail_position_ms,
+            Some(1200 + result.duration_shift_ms)
+        );
+    }
+
+    #[test]
+    fn unsupported_container_converts_and_loads() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("clip.ts");
+        generate(&source, &["-c:v", "mpeg2video", "-c:a", "mp2"]);
+        let services = Services::production();
+        assert!(matches!(
+            run_load(&services, &source),
+            LoadOutcome::Unsupported(_)
+        ));
+        let destination = suggest_conversion_path(&source, |p| p.exists());
+        let out = run_convert(
+            services.converter.as_ref(),
+            &source,
+            &destination,
+            &mut |_| {},
+        )
+        .unwrap();
+        let video = loaded(&services, &out);
+        assert_eq!(services.writer.reencode_reason(&video), None);
+    }
+}
