@@ -870,6 +870,25 @@ fn apply_intentional_deviations(case: &str, golden: &mut Value, cmds: &mut Vec<V
         }
         *cmds = mp4_cmds;
     }
+
+    // Fix 7: an inserted preview also carries the `video-thumbnailer-preview`
+    // marker item (`frame` here), so previews made from an image, which have
+    // no position tags, are still recognised and replaced on re-save.
+    for at in ["/save", "/first_save", "/second_save"] {
+        let Some(keys) = golden
+            .pointer_mut(&format!("{at}/output/mp4_tags/keys"))
+            .and_then(Value::as_array_mut)
+        else {
+            continue;
+        };
+        if keys
+            .iter()
+            .any(|k| k == "----:com.apple.iTunes:video-thumbnailer-position-ms")
+        {
+            keys.push(json!("----:com.apple.iTunes:video-thumbnailer-preview"));
+            keys.sort_by(|a, b| a.as_str().cmp(&b.as_str()));
+        }
+    }
 }
 
 /// Fix 5: rewrite the Python overlay re-encode (command `i`) into the
