@@ -1,0 +1,219 @@
+// Welcome screen: headline, three-step guide and drop zone (start_screen.py).
+
+import { Theme } from "theme.slint";
+import { OpenFileIcon, ChooseFrameIcon, SavePreviewIcon, FolderIcon } from "icons.slint";
+
+export global StartTexts {
+    out property <string> formats: "MP4, MOV, MKV, AVI, WEBM and other video formats";
+}
+
+component Step inherits VerticalLayout {
+    in property <string> label;
+    width: 190px;
+    spacing: 10px;
+    alignment: start;
+    HorizontalLayout {
+        alignment: center;
+        tile := Rectangle {
+            width: 76px;
+            height: 76px;
+            border-radius: 16px;
+            background: #8080801a;
+            @children
+        }
+    }
+    Text {
+        text: root.label;
+        font-size: 15px;
+        horizontal-alignment: center;
+        color: Theme.text;
+    }
+}
+
+component StepIcon inherits Rectangle {
+    width: 48px;
+    height: 48px;
+}
+
+component Arrow inherits VerticalLayout {
+    padding-top: 20px;
+    alignment: start;
+    Text {
+        text: "→";
+        font-size: 24px;
+        color: Theme.muted;
+        horizontal-alignment: center;
+    }
+}
+
+export component DropZone inherits Rectangle {
+    in property <string> title;
+    in property <string> hint;
+    /// A file is being dragged over the window.
+    in property <bool> drag-hover;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    property <bool> highlighted: (touch.has-hover || root.drag-hover) && root.enabled;
+    property <color> stroke: Theme.accent.with-alpha((highlighted ? 230 : 150) / 255);
+    property <length> dash: 8px;
+    property <length> gap: 5px;
+    property <length> corner: 12px;
+    property <int> h-dashes: max(0, floor((root.width - 2 * corner + gap) / (dash + gap)));
+    property <int> v-dashes: max(0, floor((root.height - 2 * corner + gap) / (dash + gap)));
+    property <length> h-offset: (root.width - (h-dashes * (dash + gap) - gap)) / 2;
+    property <length> v-offset: (root.height - (v-dashes * (dash + gap) - gap)) / 2;
+    min-height: 180px;
+    border-radius: 12px;
+    background: Theme.accent.with-alpha((highlighted ? 28 : 14) / 255);
+    accessible-role: button;
+    accessible-label: "Open video file";
+    accessible-action-default => { root.clicked(); }
+
+    // Dashed outline (Slint has no dashed strokes): straight dashes along
+    // the edges plus rounded corner arcs.
+    for i in h-dashes: Rectangle {
+        x: h-offset + i * (dash + gap);
+        y: 0;
+        width: dash;
+        height: 2px;
+        background: stroke;
+    }
+    for i in h-dashes: Rectangle {
+        x: h-offset + i * (dash + gap);
+        y: root.height - 2px;
+        width: dash;
+        height: 2px;
+        background: stroke;
+    }
+    for i in v-dashes: Rectangle {
+        x: 0;
+        y: v-offset + i * (dash + gap);
+        width: 2px;
+        height: dash;
+        background: stroke;
+    }
+    for i in v-dashes: Rectangle {
+        x: root.width - 2px;
+        y: v-offset + i * (dash + gap);
+        width: 2px;
+        height: dash;
+        background: stroke;
+    }
+    Path {
+        x: 0;
+        y: 0;
+        width: root.width;
+        height: root.height;
+        viewbox-width: root.width / 1px;
+        viewbox-height: root.height / 1px;
+        stroke: stroke;
+        stroke-width: 2px;
+        property <float> w: root.width / 1px - 1;
+        property <float> h: root.height / 1px - 1;
+        commands: "M 1 9 Q 1 1 9 1 M " + (w - 8) + " 1 Q " + w + " 1 " + w + " 9 M " + w + " " + (h - 8)
+            + " Q " + w + " " + h + " " + (w - 8) + " " + h + " M 9 " + h + " Q 1 " + h + " 1 " + (h - 8);
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+
+    VerticalLayout {
+        padding-left: 24px;
+        padding-right: 24px;
+        padding-top: 24px;
+        padding-bottom: 20px;
+        spacing: 4px;
+        alignment: center;
+        HorizontalLayout {
+            alignment: center;
+            FolderIcon { width: 56px; height: 56px; }
+        }
+        Rectangle { height: 6px; }
+        Text {
+            text: root.title;
+            font-size: 18px;
+            font-weight: 600;
+            horizontal-alignment: center;
+            color: Theme.text;
+        }
+        Text {
+            text: root.hint;
+            font-size: 15px;
+            color: Theme.muted;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
+        Rectangle { height: 14px; }
+        Text {
+            text: StartTexts.formats;
+            font-size: 12px;
+            color: Theme.muted;
+            horizontal-alignment: center;
+        }
+    }
+}
+
+export component StartScreen inherits VerticalLayout {
+    in property <string> drop-title;
+    in property <string> drop-hint;
+    in property <bool> drag-hover;
+    in property <bool> drops-accepted: true;
+    callback open-clicked();
+
+    padding-left: 40px;
+    padding-right: 40px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+    spacing: 0px;
+
+    Rectangle { vertical-stretch: 1; }
+    Text {
+        text: "Create a preview from any video";
+        font-size: 30px;
+        font-weight: 700;
+        horizontal-alignment: center;
+        wrap: word-wrap;
+        color: Theme.text;
+    }
+    Rectangle { height: 6px; }
+    Text {
+        text: "Open a video, choose a frame, and save it as an image.";
+        font-size: 15px;
+        color: Theme.muted;
+        horizontal-alignment: center;
+        wrap: word-wrap;
+    }
+    Rectangle { height: 28px; }
+    HorizontalLayout {
+        alignment: center;
+        spacing: 0px;
+        Step {
+            label: "1. Open a file";
+            StepIcon { OpenFileIcon { } }
+        }
+        Arrow { }
+        Step {
+            label: "2. Choose a frame";
+            StepIcon { ChooseFrameIcon { } }
+        }
+        Arrow { }
+        Step {
+            label: "3. Save the preview";
+            StepIcon { SavePreviewIcon { } }
+        }
+    }
+    Rectangle { height: 28px; }
+    DropZone {
+        vertical-stretch: 2;
+        title: root.drop-title;
+        hint: root.drop-hint;
+        drag-hover: root.drag-hover;
+        enabled: root.drops-accepted;
+        clicked => { root.open-clicked(); }
+    }
+    Rectangle { vertical-stretch: 1; }
+}

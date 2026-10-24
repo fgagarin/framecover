@@ -1,0 +1,218 @@
+// FrameCover main window. All state lives in Rust (src/controller.rs); this
+// file only lays out and forwards input.
+
+import { Theme } from "theme.slint";
+import { StartScreen } from "start-screen.slint";
+import { AppFooter } from "footer.slint";
+import { PathBar, Preview, Filmstrip, Timeline, FilmTile } from "editor.slint";
+import { DialogLayer, DialogData, DialogKind } from "dialogs.slint";
+
+export { FilmTile, DialogData, DialogKind }
+
+export component AppWindow inherits Window {
+    title: "FrameCover";
+    icon: @image-url("../../../icon.png");
+    min-width: 900px;
+    min-height: 560px;
+    preferred-width: 900px;
+    preferred-height: 560px;
+    background: Theme.window-background;
+    default-font-size: 13px;
+
+    // Screens
+    in property <bool> editor-visible;
+
+    // Start screen
+    in property <string> drop-title;
+    in property <string> drop-hint;
+    in property <bool> drops-accepted: true;
+    in property <bool> drag-hover;
+
+    // Footer
+    in property <string> version;
+    in property <string> project-url;
+    in property <bool> update-visible;
+    in property <string> update-text;
+    in property <string> update-tooltip;
+    in property <bool> update-enabled: true;
+    in property <color> update-color: transparent;
+    in property <color> update-dot-color: Theme.dot-idle;
+
+    // Editor
+    in property <string> video-path;
+    in property <string> frame-title: "Frame";
+    in property <image> frame-image;
+    in property <bool> has-frame;
+    in property <image> thumb-image;
+    in property <bool> has-thumb;
+    in property <bool> progress-visible;
+    in property <string> progress-text;
+    in property <bool> save-enabled;
+    in property <string> save-text: "Save thumbnail";
+    in property <bool> saving;
+    in property <string> save-tooltip;
+    in property <bool> reencode-visible;
+    in property <string> saved-label;
+    in property <[FilmTile]> film-tiles;
+    in property <bool> timeline-enabled;
+    in property <bool> timeline-has-duration;
+    in property <float> timeline-fill;
+    in property <string> timeline-label: "0:00 / 0:00";
+
+    // Dialogs
+    in property <DialogData> dialog;
+
+    callback open-file();
+    callback path-clicked();
+    callback save-copy();
+    callback overwrite();
+    callback show-reencode-reason();
+    callback film-clicked(length);
+    callback film-resized(length);
+    callback timeline-pointer(float, bool);
+    callback step-frame(int);
+    callback show-shortcuts();
+    callback show-about();
+    callback update-clicked();
+    callback open-project-page();
+    callback dialog-dismiss();
+    callback convert-answer(bool);
+    callback overwrite-answer(int, bool);
+    callback conflict-answer(int);
+    callback error-find-cause();
+    callback error-report-problem();
+
+    /// Reset per-dialog local state; called by Rust whenever a new dialog opens.
+    public function reset-dialog-state() {
+        dialogs.suppress-warning = false;
+        dialogs.details-shown = false;
+        dialogs.copied = false;
+        keys.focus();
+    }
+
+    public function refocus() {
+        keys.focus();
+    }
+
+    keys := FocusScope {
+        init => { self.focus(); }
+        key-pressed(event) => {
+            if root.dialog.kind != DialogKind.none {
+                if event.text == Key.Escape {
+                    dialogs.cancel();
+                    return accept;
+                }
+                if event.text == Key.Return {
+                    dialogs.accept-default();
+                    return accept;
+                }
+                return reject;
+            }
+            if event.text == Key.LeftArrow && !event.modifiers.control && !event.modifiers.alt {
+                root.step-frame(-1);
+                return accept;
+            }
+            if event.text == Key.RightArrow && !event.modifiers.control && !event.modifiers.alt {
+                root.step-frame(1);
+                return accept;
+            }
+            if event.modifiers.control && (event.text == "o" || event.text == "O") {
+                root.open-file();
+                return accept;
+            }
+            if event.modifiers.control && (event.text == "s" || event.text == "S") {
+                root.save-copy();
+                return accept;
+            }
+            if event.text == "?" || (event.text == "/" && event.modifiers.shift) {
+                root.show-shortcuts();
+                return accept;
+            }
+            reject
+        }
+
+        VerticalLayout {
+            padding: 16px;
+            spacing: 12px;
+
+            if !root.editor-visible: StartScreen {
+                vertical-stretch: 1;
+                drop-title: root.drop-title;
+                drop-hint: root.drop-hint;
+                drag-hover: root.drag-hover;
+                drops-accepted: root.drops-accepted;
+                open-clicked => { root.open-file(); }
+            }
+
+            if root.editor-visible: PathBar {
+                path: root.video-path;
+                open-clicked => { root.open-file(); }
+                path-clicked => { root.path-clicked(); }
+            }
+            if root.editor-visible: Preview {
+                vertical-stretch: 1;
+                frame-title: root.frame-title;
+                frame-image: root.frame-image;
+                has-frame: root.has-frame;
+                thumb-image: root.thumb-image;
+                has-thumb: root.has-thumb;
+                progress-visible: root.progress-visible;
+                progress-text: root.progress-text;
+                save-enabled: root.save-enabled;
+                save-text: root.save-text;
+                saving: root.saving;
+                save-tooltip: root.save-tooltip;
+                reencode-visible: root.reencode-visible;
+                saved-label: root.saved-label;
+                save-copy => { root.save-copy(); }
+                overwrite => { root.overwrite(); }
+                show-reencode-reason => { root.show-reencode-reason(); }
+            }
+            if root.editor-visible: Filmstrip {
+                tiles: root.film-tiles;
+                clicked(x) => { root.film-clicked(x); }
+                resized(w) => { root.film-resized(w); }
+            }
+            if root.editor-visible: Timeline {
+                enabled: root.timeline-enabled;
+                has-duration: root.timeline-has-duration;
+                fill: root.timeline-fill;
+                label: root.timeline-label;
+                pointer(ratio, released) => { root.timeline-pointer(ratio, released); }
+            }
+
+            AppFooter {
+                version: root.version;
+                project-url: root.project-url;
+                status-visible: root.update-visible;
+                status-text: root.update-text;
+                status-tooltip: root.update-tooltip;
+                status-enabled: root.update-enabled;
+                status-color: root.update-color;
+                status-dot-color: root.update-dot-color;
+                open-project-page => { root.open-project-page(); }
+                show-about => { root.show-about(); }
+                status-clicked => { root.update-clicked(); }
+            }
+        }
+
+        // Drag-and-drop highlight over the editor (the start screen
+        // highlights its drop zone instead).
+        if root.drag-hover && root.editor-visible && root.drops-accepted: Rectangle {
+            border-width: 2px;
+            border-color: Theme.accent;
+            border-radius: 8px;
+            background: Theme.accent.with-alpha(0.06);
+        }
+
+        dialogs := DialogLayer {
+            data: root.dialog;
+            dismiss => { root.dialog-dismiss(); }
+            convert-answer(yes) => { root.convert-answer(yes); }
+            overwrite-answer(choice, suppress) => { root.overwrite-answer(choice, suppress); }
+            conflict-answer(choice) => { root.conflict-answer(choice); }
+            find-cause => { root.error-find-cause(); }
+            report-problem => { root.error-report-problem(); }
+        }
+    }
+}

@@ -1,0 +1,44 @@
+{
+  "case": "resave_mkv",
+  "commands": [
+    {
+      "argv": [
+        "<FFMPEG>",
+        "-y",
+        "-i",
+        "<WORK>/.vt_XXXXXXXX.tmp",
+        "-attach",
+        "<WORK>/.vt_cover_XXXXXXXX.jpg",
+        "-metadata:s:t",
+        "mimetype=image/jpeg",
+        "-metadata:s:t",
+        "filename=cover.jpg",
+        "-c",
+        "copy",
+        "<WORK>/.vt_out_XXXXXXXX.mkv"
+      ],
+      "returncode": 0
+    },
+    {
+      "marker": "second save on the produced copy"
+    },
+    {
+      "argv": [
+        "<FFMPEG>",
+        "-y",
+        "-i",
+        "<WORK>/.vt_XXXXXXXX.tmp",
+        "-attach",
+        "<WORK>/.vt_cover_XXXXXXXX.jpg",
+        "-metadata:s:t",
+        "mimetype=image/jpeg",
+        "-metadata:s:t",
+        "filename=cover.jpg",
+        "-c",
+        "copy",
+        "<WORK>/.vt_out_XXXXXXXX.mkv"
+      ],
+      "returncode": 0
+    }
+  ]
+}

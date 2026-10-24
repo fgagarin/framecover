@@ -1,0 +1,75 @@
+{
+  "case": "convert_wmv",
+  "commands": [
+    {
+      "argv": [
+        "<FFMPEG>",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-nostdin",
+        "-y",
+        "-i",
+        "<WORK>/sample.wmv",
+        "-map",
+        "0:V:0",
+        "-map",
+        "0:a?",
+        "-map_chapters",
+        "0",
+        "-c",
+        "copy",
+        "-movflags",
+        "+faststart",
+        "<WORK>/.sample-converted-XXXXXXXX.mp4"
+      ],
+      "returncode": -22
+    },
+    {
+      "argv": [
+        "<FFMPEG>",
+        "-hide_banner",
+        "-encoders"
+      ],
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "<FFMPEG>",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-nostdin",
+        "-y",
+        "-i",
+        "<WORK>/sample.wmv",
+        "-map",
+        "0:V:0",
+        "-map",
+        "0:a?",
+        "-map_chapters",
+        "0",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "medium",
+        "-crf",
+        "20",
+        "-profile:v",
+        "high",
+        "-vf",
+        "pad=ceil(iw/2)*2:ceil(ih/2)*2",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "192k",
+        "-movflags",
+        "+faststart",
+        "<WORK>/.sample-converted-XXXXXXXX.mp4"
+      ],
+      "returncode": 0
+    }
+  ]
+}

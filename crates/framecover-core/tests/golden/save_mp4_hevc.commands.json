@@ -1,0 +1,53 @@
+{
+  "case": "save_mp4_hevc",
+  "commands": [
+    {
+      "argv": [
+        "<FFMPEG>",
+        "-y",
+        "-i",
+        "<WORK>/.hevc-thumbnail.save-XXXXXXXX.mp4",
+        "-loop",
+        "1",
+        "-i",
+        "<WORK>/.vt_frame_XXXXXXXX.png",
+        "-i",
+        "<WORK>/.vt_cover_XXXXXXXX.jpg",
+        "-filter_complex",
+        "[1:v][0:v]scale2ref=flags=lanczos[poster][base];[base][poster]overlay=shortest=1:enable='eq(n,0)'[v]",
+        "-map",
+        "[v]",
+        "-map",
+        "0:a?",
+        "-map",
+        "0:s?",
+        "-map",
+        "2:v",
+        "-map_metadata",
+        "0",
+        "-map_chapters",
+        "0",
+        "-c:v:0",
+        "libx264",
+        "-preset:v:0",
+        "veryfast",
+        "-crf:v:0",
+        "23",
+        "-pix_fmt:v:0",
+        "yuv420p",
+        "-c:v:1",
+        "copy",
+        "-disposition:v:1",
+        "attached_pic",
+        "-c:a",
+        "copy",
+        "-c:s",
+        "copy",
+        "-f",
+        "mp4",
+        "<WORK>/.vt_XXXXXXXX.tmp"
+      ],
+      "returncode": 0
+    }
+  ]
+}

@@ -76,3 +76,11 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+
+# Rust
+/target/
+# Downloaded FFmpeg binaries (xtask fetch-ffmpeg)
+/vendor/
+
+# Claude Code agent worktrees
+/.claude/worktrees/

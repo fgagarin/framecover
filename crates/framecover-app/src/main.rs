@@ -1,0 +1,21 @@
+//! FrameCover desktop application (Slint GUI).
+
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+mod controller;
+mod embedded;
+mod error_report;
+mod filmstrip;
+mod frame_worker;
+mod services;
+mod settings;
+mod timeline;
+mod ui;
+mod window_fit;
+mod workers;
+
+slint::include_modules!();
+
+fn main() {
+    ui::run();
+}

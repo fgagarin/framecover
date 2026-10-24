@@ -1,0 +1,97 @@
+// Bottom bar: name and version (opens About), project link, update status (AppFooter).
+
+import { Theme } from "theme.slint";
+import { StatusDot } from "icons.slint";
+
+component FooterText inherits Text {
+    font-size: 12px;
+    color: Theme.muted;
+    vertical-alignment: center;
+}
+
+component Separator inherits Rectangle {
+    width: 1px;
+    height: 14px;
+    background: Theme.separator;
+}
+
+/// Grey text that turns link-coloured on hover. `accent` (when set) replaces
+/// the grey to draw attention, e.g. for an available update or an error.
+component Link inherits Rectangle {
+    in property <string> text;
+    /// Extra glyph after the text (e.g. "↗"). Kept in its own element so a
+    /// fallback font cannot change the line height of the main label.
+    in property <string> suffix;
+    in property <string> tooltip;
+    in property <bool> enabled: true;
+    in property <color> accent: transparent;
+    /// Colour of a status dot before the text; `transparent` for none.
+    in property <color> dot: transparent;
+    callback clicked();
+    property <color> text-color: touch.has-hover && root.enabled ? Theme.link
+        : root.accent != transparent ? root.accent
+        : Theme.muted;
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-enabled: root.enabled;
+    accessible-action-default => { if root.enabled { root.clicked(); } }
+    HorizontalLayout {
+        spacing: root.dot != transparent ? 6px : 3px;
+        if root.dot != transparent: VerticalLayout {
+            alignment: center;
+            StatusDot { tint: root.dot; }
+        }
+        FooterText { text: root.text; color: root.text-color; }
+        if root.suffix != "": FooterText { text: root.suffix; color: root.text-color; }
+    }
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? MouseCursor.pointer : MouseCursor.default;
+        clicked => { root.clicked(); }
+    }
+    if root.tooltip != "": Tooltip { text: @markdown("\{root.tooltip}"); }
+}
+
+export component AppFooter inherits HorizontalLayout {
+    in property <string> version;
+    in property <string> project-url;
+    in property <bool> status-visible;
+    in property <string> status-text;
+    in property <string> status-tooltip;
+    in property <bool> status-enabled: true;
+    /// Text colour for a status that needs attention; `transparent` for grey.
+    in property <color> status-color: transparent;
+    in property <color> status-dot-color: Theme.dot-idle;
+    callback open-project-page();
+    callback show-about();
+    callback status-clicked();
+
+    padding-left: 4px;
+    padding-right: 4px;
+    spacing: 12px;
+    height: 28px;
+
+    Link {
+        text: "FrameCover " + root.version;
+        tooltip: "About FrameCover";
+        clicked => { root.show-about(); }
+    }
+    VerticalLayout { alignment: center; Separator { } }
+    Link {
+        text: "Project page";
+        suffix: "↗";
+        tooltip: root.project-url;
+        clicked => { root.open-project-page(); }
+    }
+    Rectangle { horizontal-stretch: 1; }
+
+    if root.status-visible: Link {
+        horizontal-stretch: 0;
+        text: root.status-text;
+        tooltip: root.status-tooltip;
+        enabled: root.status-enabled;
+        accent: root.status-color;
+        dot: root.status-dot-color;
+        clicked => { root.status-clicked(); }
+    }
+}

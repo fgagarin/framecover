@@ -1,0 +1,37 @@
+[package]
+name = "framecover-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "FrameCover core: video probing, frame extraction and thumbnail embedding"
+
+[dependencies]
+hex = "0.4.3"
+image = { version = "0.25.10", default-features = false, features = ["jpeg", "png"] }
+jpeg-encoder = "0.7.1"
+log = "0.4.34"
+md5 = "0.8.1"
+mp4ameta = "0.13.0"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = { version = "1.0.154", default-features = false }
+sha2 = "0.11.1"
+tempfile = "3.27.0"
+thiserror = "2.0.21"
+png = "0.18.1"
+rustls = { version = "0.23.46", default-features = false }
+ureq = { version = "3.5.0", features = ["json", "platform-verifier"] }
+
+[target."cfg(windows)".dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_UI_Shell", "Win32_System_Threading", "Win32_Foundation", "Win32_Storage_FileSystem", "Win32_UI_WindowsAndMessaging"] }
+
+[dev-dependencies]
+criterion = { version = "0.7", default-features = false }
+tempfile = "3.27.0"
+
+[[bench]]
+name = "frame_extraction"
+harness = false
+
+[lints]
+workspace = true
