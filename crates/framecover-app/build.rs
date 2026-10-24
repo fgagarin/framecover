@@ -2,6 +2,7 @@
 //! (`FRAMECOVER_EMBED_FFMPEG_DIR`) and, on Windows, embeds the executable
 //! icon and application manifest.
 
+#[cfg(windows)]
 const WINDOWS_MANIFEST: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
   <assemblyIdentity type="win32" name="FrameCover.Application" version="1.0.0.0"/>
