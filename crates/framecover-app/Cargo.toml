@@ -1,0 +1,13 @@
+[package]
+name = "framecover"
+description = "Pick any frame of a video and make it the file's thumbnail"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+framecover-core = { path = "../framecover-core" }
+
+[lints]
+workspace = true
