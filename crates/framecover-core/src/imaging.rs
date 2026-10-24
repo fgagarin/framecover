@@ -37,12 +37,23 @@ pub fn thumbnail(img: &RgbImage, max_w: u32, max_h: u32) -> RgbImage {
     image::imageops::resize(img, w, h, FilterType::Lanczos3)
 }
 
-/// Encode as baseline JPEG at `quality`.
+/// Encode as baseline JPEG at `quality` with 4:2:0 chroma subsampling, like
+/// Pillow's default. Falls back to the `image` encoder (4:4:4) for images
+/// wider or taller than 65535 px, which `jpeg-encoder` cannot represent.
 pub fn encode_jpeg(img: &RgbImage, quality: u8) -> Result<Vec<u8>> {
     let mut buf = Vec::new();
-    JpegEncoder::new_with_quality(&mut buf, quality)
-        .encode_image(img)
-        .map_err(|e| Error::Other(format!("JPEG encoding failed: {e}")))?;
+    match (u16::try_from(img.width()), u16::try_from(img.height())) {
+        (Ok(w), Ok(h)) => {
+            let mut encoder = jpeg_encoder::Encoder::new(&mut buf, quality);
+            encoder.set_sampling_factor(jpeg_encoder::SamplingFactor::R_4_2_0);
+            encoder
+                .encode(img.as_raw(), w, h, jpeg_encoder::ColorType::Rgb)
+                .map_err(|e| Error::Other(format!("JPEG encoding failed: {e}")))?;
+        }
+        _ => JpegEncoder::new_with_quality(&mut buf, quality)
+            .encode_image(img)
+            .map_err(|e| Error::Other(format!("JPEG encoding failed: {e}")))?,
+    }
     Ok(buf)
 }
 

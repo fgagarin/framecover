@@ -485,16 +485,6 @@ fn compare_description(d: &mut Diff, at: &str, expected: &Value, actual: &Value)
             "sample_rate",
             "channels",
         ] {
-            // KNOWN DEVIATION (imaging.rs, owned elsewhere): Pillow encodes the
-            // q90 cover JPEG with 4:2:0 chroma (`yuvj420p`); the `image`
-            // crate's encoder is fixed at 4:4:4 (`yuvj444p`).
-            if key == "pix_fmt"
-                && e["codec_name"] == "mjpeg"
-                && e[key] == "yuvj420p"
-                && a[key] == "yuvj444p"
-            {
-                continue;
-            }
             d.eq(&format!("{at}.probe.streams[{i}].{key}"), &e[key], &a[key]);
         }
         if mp4ish && e["codec_type"] == "video" {
