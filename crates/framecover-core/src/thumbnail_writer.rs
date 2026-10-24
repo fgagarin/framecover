@@ -1315,12 +1315,33 @@ fn write_concat(
     }
 
     let mut concat_source: &Path = video_path;
+    let source = probe::probe(video_path)?;
+    let playable_index = source
+        .first_playable_video()
+        .map(|s| s.index)
+        .ok_or_else(|| Error::NoVideoStream(video_path.to_path_buf()))?;
+    if !replace_existing_preview && playable_index != 0 {
+        // The concat demuxer pairs streams by index with the preview's single
+        // video stream, so a source whose video is not stream 0 (e.g. audio
+        // track first) would feed audio packets into the video track.
+        stages.start("Extracting video stream");
+        run_ffmpeg(args![
+            "-y",
+            "-i",
+            video_path,
+            "-map",
+            format!("0:{playable_index}"),
+            "-c:v",
+            "copy",
+            "-an",
+            "-sn",
+            "-f",
+            "mp4",
+            temps.stripped,
+        ])?;
+        concat_source = &temps.stripped;
+    }
     if replace_existing_preview {
-        let source = probe::probe(video_path)?;
-        let playable_index = source
-            .first_playable_video()
-            .map(|s| s.index)
-            .ok_or_else(|| Error::NoVideoStream(video_path.to_path_buf()))?;
         stages.start("Removing previous preview frame");
         run_ffmpeg(args![
             "-y",

@@ -176,6 +176,28 @@ fn b_frame_source_keeps_frame_rate() {
 }
 
 #[test]
+fn source_with_audio_as_first_track() {
+    let dir = tempfile::tempdir().unwrap();
+    let base = common::sample_video(dir.path());
+    let source = dir.path().join("audio_first.mp4");
+    support::run_ffmpeg(&[
+        "-y",
+        "-i",
+        base.to_str().unwrap(),
+        "-map",
+        "0:a",
+        "-map",
+        "0:v",
+        "-c",
+        "copy",
+        source.to_str().unwrap(),
+    ]);
+    let info = framecover_core::probe::probe(&source).unwrap();
+    assert_eq!(info.first_playable_video().unwrap().index, 1);
+    check_first_save(&source, 512, 25);
+}
+
+#[test]
 fn source_without_b_frames() {
     let dir = tempfile::tempdir().unwrap();
     let source = dir.path().join("nob.mp4");
