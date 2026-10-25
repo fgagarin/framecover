@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 <!-- insertion marker -->
+## [v0.3.1](https://github.com/fgagarin/framecover/releases/tag/v0.3.1) - 2026-10-26
+
+<small>[Compare with v0.3.0](https://github.com/fgagarin/framecover/compare/v0.3.0...v0.3.1)</small>
+
+### Bug Fixes
+
+- link liblzma statically so the macOS app starts on other Macs ([a44e86f](https://github.com/fgagarin/framecover/commit/a44e86f246644734f77f446b693f9e8d90c48558) by Fedor Gagarin). Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
 ## [v0.3.0](https://github.com/fgagarin/framecover/releases/tag/v0.3.0) - 2026-10-25
 
 <small>[Compare with v0.2.0](https://github.com/fgagarin/framecover/compare/v0.2.0...v0.3.0)</small>
