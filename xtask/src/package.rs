@@ -140,6 +140,11 @@ pub fn package(
                 lipo(&[arm.join(tool), x64.join(tool)], &universal)?;
                 tools.push(universal);
             }
+            // A dylib from the build machine (e.g. Homebrew's liblzma) makes
+            // the app fail to start everywhere else.
+            for binary in std::iter::once(&bin).chain(&tools) {
+                check_macos_linkage(binary)?;
+            }
 
             let plist = work.join("Info.plist");
             std::fs::write(&plist, info_plist(&version))?;
@@ -227,6 +232,47 @@ fn lipo(inputs: &[PathBuf], output: &Path) -> Result<()> {
     let mut cmd = Command::new("lipo");
     cmd.arg("-create").args(inputs).arg("-output").arg(output);
     status(&mut cmd).map_err(|e| format!("{e} (lipo is required to build the macOS bundle)").into())
+}
+
+/// Fail if `binary` links a dynamic library outside the OS (`/usr/lib`,
+/// `/System/Library`). Skipped when `otool` is unavailable (non-macOS hosts).
+fn check_macos_linkage(binary: &Path) -> Result<()> {
+    let output = match Command::new("otool").arg("-L").arg(binary).output() {
+        Ok(output) if output.status.success() => output,
+        Ok(output) => bail!(
+            "otool -L {} failed: {}",
+            binary.display(),
+            String::from_utf8_lossy(&output.stderr)
+        ),
+        Err(_) => {
+            println!("otool not found; not checking {}", binary.display());
+            return Ok(());
+        }
+    };
+    let foreign = foreign_dylibs(&String::from_utf8_lossy(&output.stdout));
+    if !foreign.is_empty() {
+        bail!(
+            "{} links libraries that won't exist on users' Macs (link them statically):\n  {}",
+            binary.display(),
+            foreign.join("\n  ")
+        );
+    }
+    Ok(())
+}
+
+/// Library paths in `otool -L` output that aren't part of macOS.
+fn foreign_dylibs(otool_output: &str) -> Vec<String> {
+    let mut foreign: Vec<String> = otool_output
+        .lines()
+        // Header lines name the file (and its arch for universal binaries).
+        .filter(|line| line.starts_with(char::is_whitespace))
+        .filter_map(|line| line.split_whitespace().next())
+        .filter(|lib| !lib.starts_with("/usr/lib/") && !lib.starts_with("/System/Library/"))
+        .map(str::to_owned)
+        .collect();
+    foreign.sort();
+    foreign.dedup();
+    foreign
 }
 
 /// Lay the bundle out on disk and ad-hoc sign it (required for arm64 code
@@ -411,6 +457,28 @@ mod tests {
 
     use super::*;
     use crate::ffmpeg::tests::tempdir;
+
+    #[test]
+    fn foreign_dylibs_ignores_system_libraries() {
+        let otool = [
+            "target/macos-bundle/framecover (architecture arm64):",
+            "\t/opt/homebrew/opt/xz/lib/liblzma.5.dylib (compatibility version 10.0.0)",
+            "\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0)",
+            "\t/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit (compatibility version 45.0.0)",
+            "target/macos-bundle/framecover (architecture x86_64):",
+            "\t/usr/local/opt/xz/lib/liblzma.5.dylib (compatibility version 10.0.0)",
+            "\t/usr/lib/libiconv.2.dylib (compatibility version 7.0.0)",
+        ]
+        .join("\n");
+        assert_eq!(
+            foreign_dylibs(&otool),
+            [
+                "/opt/homebrew/opt/xz/lib/liblzma.5.dylib",
+                "/usr/local/opt/xz/lib/liblzma.5.dylib"
+            ]
+        );
+        assert!(foreign_dylibs("bin:\n\t/usr/lib/libSystem.B.dylib (x)\n").is_empty());
+    }
 
     #[test]
     fn plist_has_bundle_metadata() {

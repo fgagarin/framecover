@@ -124,6 +124,26 @@ jobs:
         run: cargo xtask fetch-ffmpeg
       - name: Package distribution
         run: cargo xtask package ${{ matrix.platform }}
+      - name: Smoke-test the packaged app
+        # Runs the shipped binary from the unpacked asset, so a missing
+        # dynamic library (dyld/ld.so) or a broken bundle fails the build.
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/smoke"
+          mkdir -p "$out"
+          case "${{ matrix.platform }}" in
+            macos)
+              tar -xzf release-assets/framecover-*-macos.tar.gz -C "$out"
+              "$out/framecover.app/Contents/MacOS/framecover" --version ;;
+            linux)
+              tar -xzf release-assets/framecover-*-linux.tar.gz -C "$out"
+              "$out/framecover/framecover" --version ;;
+            windows)
+              ./release-assets/framecover-*-windows.exe --version
+              unzip -q release-assets/framecover-*-windows-cli.zip -d "$out"
+              "$out/framecover.com" --version ;;
+          esac
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
