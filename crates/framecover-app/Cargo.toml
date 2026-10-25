@@ -39,7 +39,7 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 log = "0.4.34"
 env_logger = { version = "0.11.11", default-features = false, features = ["auto-color", "humantime"] }
-liblzma = "0.4.9"
+liblzma = { version = "0.4.9", features = ["static"] }
 tempfile = "3.27.0"
 clap = { version = "4.6.7", default-features = false, features = [
     "std",
@@ -63,7 +63,7 @@ winreg = "0.55.0"
 
 [build-dependencies]
 hex = "0.4.3"
-liblzma = "0.4.9"
+liblzma = { version = "0.4.9", features = ["static"] }
 sha2 = "0.11.1"
 slint-build = "1.18.1"
 
