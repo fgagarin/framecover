@@ -340,14 +340,19 @@ mod tests {
         let ending = Arc::clone(&activity);
         let ender = std::thread::spawn(move || {
             std::thread::sleep(Duration::from_millis(50));
+            let ending_at = Instant::now();
             ending.end();
+            ending_at
         });
         let started = Instant::now();
         activity.wait_until_quiet(Duration::from_millis(30), Duration::from_secs(5));
-        let waited = started.elapsed();
-        ender.join().unwrap();
-        assert!(waited >= Duration::from_millis(80), "{waited:?}");
-        assert!(waited < Duration::from_secs(2), "{waited:?}");
+        let returned_at = Instant::now();
+        let ending_at = ender.join().unwrap();
+        // Measured from the request's end, not from `started`: the ender
+        // thread may already be sleeping before the clock starts.
+        let quiet = returned_at.saturating_duration_since(ending_at);
+        assert!(quiet >= Duration::from_millis(30), "{quiet:?}");
+        assert!(returned_at - started < Duration::from_secs(2));
 
         // Never longer than `max_wait`.
         activity.begin();
