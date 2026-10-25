@@ -1644,7 +1644,7 @@ dependencies = [
 
 [[package]]
 name = "framecover"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "clap",
  "dirs",
@@ -1669,7 +1669,7 @@ dependencies = [
 
 [[package]]
 name = "framecover-core"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "criterion",
  "hex",

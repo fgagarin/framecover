@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 <!-- insertion marker -->
+## [v0.3.0](https://github.com/fgagarin/framecover/releases/tag/v0.3.0) - 2026-10-25
+
+<small>[Compare with v0.2.0](https://github.com/fgagarin/framecover/compare/v0.2.0...v0.3.0)</small>
+
+### Features
+
+- console launcher framecover.com for the Windows CLI ([a3b0f03](https://github.com/fgagarin/framecover/commit/a3b0f03aab4a5394cbf6b88f5966ec2e664cdbdc) by Fedor Gagarin). Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+- command-line interface (set, info, convert, extract) ([13a0f46](https://github.com/fgagarin/framecover/commit/13a0f46ecb788175282f43cf8c59a3e8d5eea4ef) by Fedor Gagarin). Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+- HDR and 10-bit sources on the fast path ([4b7c19d](https://github.com/fgagarin/framecover/commit/4b7c19d90df3cb6a8fb6a9698b792f0f6ced68cb) by Fedor Gagarin). Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+- use an image file as the thumbnail (fit or crop to frame) ([5cef629](https://github.com/fgagarin/framecover/commit/5cef6292291fbc4bb7df21456684a5014fe710a7) by Fedor Gagarin). Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+- load still images and fit or crop them into a video frame ([a8a3798](https://github.com/fgagarin/framecover/commit/a8a37986d3b0062cbcbb52626eae63cddf00fbed) by Fedor Gagarin). Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
 ## [v0.2.0](https://github.com/fgagarin/framecover/releases/tag/v0.2.0) - 2026-10-25
 
 <small>[Compare with v0.1.0](https://github.com/fgagarin/framecover/compare/v0.1.0...v0.2.0)</small>
