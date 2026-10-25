@@ -525,26 +525,23 @@ fn hdr_hevc_mkv_is_remuxed_as_hvc1() {
     assert_eq!(reencode_reason(&out), None);
 }
 
+/// An HDR source in a codec MP4's fast path can't take (10-bit ProRes 4:2:2,
+/// built into every FFmpeg, unlike 10-bit libvpx, which some builds lack).
 #[test]
-fn hdr_vp9_is_transcoded_to_hevc_main10() {
+fn hdr_prores_is_transcoded_to_hevc_main10() {
     let dir = tempfile::tempdir().unwrap();
+    let filter = format!("{},format=yuv422p10le", to_hdr("smpte2084"));
     let source = fixture(
-        &dir.path().join("hdr_vp9.mkv"),
+        &dir.path().join("hdr_prores.mkv"),
         1,
         "160x120",
         &[
             "-vf",
-            &to_hdr("smpte2084"),
+            &filter,
             "-c:v",
-            "libvpx-vp9",
+            "prores_ks",
             "-profile:v",
-            "2",
-            "-deadline",
-            "realtime",
-            "-cpu-used",
-            "8",
-            "-b:v",
-            "200k",
+            "standard",
             "-color_primaries",
             "bt2020",
             "-color_trc",
