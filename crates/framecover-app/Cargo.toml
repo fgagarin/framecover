@@ -9,6 +9,8 @@ repository.workspace = true
 # Slint 1.18 requires Rust 1.92 (the core crate keeps the workspace MSRV).
 rust-version = "1.92"
 build = "build.rs"
+# `framecover-console` (the Windows console launcher) is a second binary.
+default-run = "framecover"
 
 [[bin]]
 name = "framecover"
@@ -39,9 +41,24 @@ log = "0.4.34"
 env_logger = { version = "0.11.11", default-features = false, features = ["auto-color", "humantime"] }
 liblzma = "0.4.9"
 tempfile = "3.27.0"
+clap = { version = "4.6.7", default-features = false, features = [
+    "std",
+    "derive",
+    "help",
+    "usage",
+    "error-context",
+    "suggestions",
+] }
 
 [target."cfg(windows)".dependencies]
-windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Graphics_Gdi"] }
+windows-sys = { version = "0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_Security",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Console",
+    "Win32_System_Threading",
+] }
 winreg = "0.55.0"
 
 [build-dependencies]

@@ -3,7 +3,10 @@
 //! updater depend on these exact names).
 //!
 //! * windows: `framecover.exe` with FFmpeg embedded at build time
-//!   (`FRAMECOVER_EMBED_FFMPEG_DIR`), copied to `framecover-<v>-windows.exe`.
+//!   (`FRAMECOVER_EMBED_FFMPEG_DIR`), copied to `framecover-<v>-windows.exe`;
+//!   plus `framecover-<v>-windows-cli.zip` holding that exe as
+//!   `framecover.exe` next to the console launcher `framecover.com`, ready to
+//!   drop into a folder on `PATH` for command-line use.
 //! * linux: `framecover-<v>-linux.tar.gz` containing `framecover/` with the
 //!   binary, `ffmpeg`, `ffprobe` and `LICENSE`.
 //! * macos: `framecover-<v>-macos.tar.gz` containing a universal (arm64 +
@@ -50,6 +53,25 @@ pub fn package(
             };
             let asset = out_dir.join(format!("{name}.exe"));
             std::fs::copy(&exe, &asset).map_err(|e| format!("{}: {e}", exe.display()))?;
+            let console = exe.with_file_name("framecover-console.exe");
+            let cli_zip = out_dir.join(format!("{name}-cli.zip"));
+            write_zip(
+                &cli_zip,
+                &[
+                    ("framecover.exe", exe.clone()),
+                    ("framecover.com", console),
+                    ("LICENSE", root().join("LICENSE")),
+                    (
+                        "FFMPEG-NOTICE.txt",
+                        root().join("licenses/FFMPEG-NOTICE.txt"),
+                    ),
+                    (
+                        "FFmpeg-GPL-3.0.txt",
+                        root().join("licenses/FFmpeg-GPL-3.0.txt"),
+                    ),
+                ],
+            )?;
+            println!("Wrote {}", cli_zip.display());
             asset
         }
         "linux" => {
@@ -324,6 +346,20 @@ impl Entry {
 
 /// Write a gzip'd tar with explicit modes (so executables keep `+x` even
 /// when packaged on Windows) and a fixed mtime for reproducibility.
+/// Write a deflate zip of `(name in archive, source file)` pairs.
+fn write_zip(dest: &Path, files: &[(&str, PathBuf)]) -> Result<()> {
+    let mut zip = zip::ZipWriter::new(File::create(dest)?);
+    let options = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+    for (name, source) in files {
+        let mut input = File::open(source).map_err(|e| format!("{}: {e}", source.display()))?;
+        zip.start_file(*name, options)?;
+        std::io::copy(&mut input, &mut zip)?;
+    }
+    zip.finish()?;
+    Ok(())
+}
+
 pub fn write_tar_gz(dest: &Path, entries: &[Entry], mtime: u64) -> Result<()> {
     let tmp = dest.with_extension("tmp");
     {
