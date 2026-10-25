@@ -3,6 +3,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod cli;
+mod cli_args;
 mod controller;
 mod embedded;
 mod error_report;

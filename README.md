@@ -181,14 +181,21 @@ every option.
 Exit codes: `0` all files succeeded, `1` at least one failed, `2` invalid
 command line.
 
-**Windows:** `framecover.exe` is a windowed program, so an interactive `cmd.exe`
-or PowerShell prompt does not wait for it: the output still appears in the
-terminal, but after the next prompt (press **Enter** for a clean prompt), and
-`%ERRORLEVEL%` / `$LASTEXITCODE` are not set. To wait for the result and get the
-exit code, use `start /wait framecover ...` in `cmd.exe`, or pipe the output in
-PowerShell (`framecover info clip.mp4 | Out-Host`). Batch files, redirected
-output (`> out.txt`) and programs that start `framecover.exe` and read its output
-(Python `subprocess`, Git Bash, CI runners) wait normally.
+**Windows:** `framecover.exe` is a windowed program, which an interactive
+`cmd.exe` or PowerShell prompt doesn't wait for. Use the
+`framecover-<version>-windows-cli.zip` download: put `framecover.exe` and
+`framecover.com` together in a folder on your `PATH`. Typing `framecover`
+then runs the small console launcher `framecover.com` (Windows picks `.com`
+before `.exe`), which runs the app, waits for it, shows its output in order and
+returns its exit code (`%ERRORLEVEL%` / `$LASTEXITCODE`); Ctrl+C stops it.
+`framecover` without a command (or with just a video path) opens the window
+and returns to the prompt immediately.
+
+Calling `framecover.exe` directly also works, but an interactive prompt returns
+before it finishes: the output appears after the next prompt and the exit code
+is not set. Batch files, redirected output (`> out.txt`), pipes and programs
+that start it and read its output (Python `subprocess`, Git Bash, CI runners)
+wait normally either way.
 
 ---
 
@@ -237,6 +244,7 @@ site/                # landing page
 
 ```bash
 cargo xtask package windows   # release-assets/framecover-<v>-windows.exe (FFmpeg embedded)
+                              #   and framecover-<v>-windows-cli.zip (exe + framecover.com)
 cargo xtask package linux     # release-assets/framecover-<v>-linux.tar.gz
 cargo xtask package macos     # release-assets/framecover-<v>-macos.tar.gz (universal .app)
 ```

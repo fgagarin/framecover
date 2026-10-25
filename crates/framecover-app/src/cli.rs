@@ -27,8 +27,7 @@ use serde_json::json;
 use crate::services::Services;
 use crate::workers::{SaveJob, run_apply};
 
-/// Command names that select the CLI (plus `help`, provided by clap).
-const COMMANDS: &[&str] = &["set", "info", "convert", "extract", "check-update", "help"];
+pub use crate::cli_args::is_cli_invocation;
 
 /// Exit code: every file succeeded.
 pub const EXIT_OK: i32 = 0;
@@ -341,16 +340,6 @@ fn format_size(bytes: u64) -> String {
 // ---------------------------------------------------------------------------
 // Entry points
 // ---------------------------------------------------------------------------
-
-/// Whether `args` (including the program name) ask for the CLI rather than
-/// the window.
-pub fn is_cli_invocation(args: &[OsString]) -> bool {
-    let Some(first) = args.get(1).and_then(|a| a.to_str()) else {
-        return false;
-    };
-    // macOS used to pass `-psn_<serial>` to apps launched from Finder.
-    COMMANDS.contains(&first) || (first.starts_with('-') && !first.starts_with("-psn_"))
-}
 
 /// Run the CLI in this process: attach to the parent console on Windows,
 /// install the embedded FFmpeg, run, and return the exit code.
