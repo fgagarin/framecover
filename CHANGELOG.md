@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 <!-- insertion marker -->
+## [v0.4.0](https://github.com/fgagarin/framecover/releases/tag/v0.4.0) - 2026-10-29
+
+<small>[Compare with v0.3.1](https://github.com/fgagarin/framecover/compare/v0.3.1...v0.4.0)</small>
+
+### Features
+
+- Android app with FFmpeg linked in-process ([05e17e1](https://github.com/fgagarin/framecover/commit/05e17e1e7bf8d5cc849f85559635e822b43e98b8) by Fedor Gagarin). Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
+### Bug Fixes
+
+- clippy overlapping ranges and the FFmpeg build script mode ([c6cb866](https://github.com/fgagarin/framecover/commit/c6cb8660e46cfc15030b38a4999dfa8811c55296) by Fedor Gagarin). Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
 ## [v0.3.1](https://github.com/fgagarin/framecover/releases/tag/v0.3.1) - 2026-10-26
 
 <small>[Compare with v0.3.0](https://github.com/fgagarin/framecover/compare/v0.3.0...v0.3.1)</small>
