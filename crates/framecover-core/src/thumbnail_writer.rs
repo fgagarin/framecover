@@ -321,7 +321,11 @@ fn decoder_long_name(codec: &str) -> Option<String> {
     static DECODERS: OnceLock<HashMap<String, String>> = OnceLock::new();
     DECODERS
         .get_or_init(|| {
-            let Ok(out) = crate::ffmpeg::ffmpeg(["-decoders"]) else {
+            let out = crate::ffmpeg::command(crate::ffmpeg::Tool::Ffmpeg).and_then(|mut cmd| {
+                cmd.args(["-hide_banner", "-nostdin", "-decoders"]);
+                crate::ffmpeg::run(&mut cmd)
+            });
+            let Ok(out) = out else {
                 return HashMap::new();
             };
             String::from_utf8_lossy(&out.stdout)

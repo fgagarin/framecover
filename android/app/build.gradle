@@ -1,0 +1,41 @@
+// FrameCover for Android: MainActivity plus the Rust library built by
+// `cargo xtask android` (cargo ndk) into ../build/jniLibs.
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'io.github.fgagarin.framecover'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'io.github.fgagarin.framecover'
+        // MediaStore RELATIVE_PATH (publishing to Movies/FrameCover) needs Q.
+        minSdk 29
+        targetSdk 35
+        versionCode Integer.parseInt(findProperty('versionCode') ?: '1')
+        versionName findProperty('versionName') ?: '0.0.0'
+        ndk {
+            abiFilters 'arm64-v8a', 'x86_64'
+        }
+    }
+
+    sourceSets {
+        main {
+            jniLibs.srcDirs = ["$rootDir/build/jniLibs"]
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            // Not signed for distribution yet: installable test builds only.
+            signingConfig signingConfigs.debug
+        }
+    }
+}

@@ -6,6 +6,10 @@ import { Palette } from "std-widgets.slint";
 export global Theme {
     out property <bool> dark: Palette.color-scheme == ColorScheme.dark;
 
+    // Phone layout (set from AppWindow.mobile): touch-sized controls.
+    in-out property <bool> mobile;
+    out property <length> control-height: mobile ? 44px : 34px;
+
     // Brand
     out property <color> accent: #5b6cf0;
     out property <color> accent-dark: #4c45d8;

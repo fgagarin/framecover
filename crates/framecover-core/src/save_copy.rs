@@ -293,6 +293,7 @@ fn verified(ops: &dyn SaveOps, destination: &Path, source_digest: &str) -> bool 
 /// Hardlink errors meaning "this filesystem cannot hardlink" (FAT/exFAT,
 /// cross-device, missing privilege): EOPNOTSUPP/ENOTSUP/ENOSYS/EPERM/EXDEV,
 /// Windows 1 (invalid function), 50 (not supported), 1314 (privilege).
+/// On Android SELinux denies apps `link()` everywhere with EACCES.
 fn hardlink_unsupported(err: &io::Error) -> bool {
     use io::ErrorKind::{CrossesDevices, Unsupported};
     if matches!(err.kind(), Unsupported | CrossesDevices) {
@@ -300,10 +301,18 @@ fn hardlink_unsupported(err: &io::Error) -> bool {
     }
     if cfg!(windows) {
         matches!(err.raw_os_error(), Some(1 | 50 | 1314))
+    } else if cfg!(target_os = "android") {
+        matches!(err.raw_os_error(), Some(1 | 13))
     } else {
         // EPERM is 1 on every Unix; ENOSYS/EOPNOTSUPP map to `Unsupported`.
         matches!(err.raw_os_error(), Some(1))
     }
+}
+
+/// Publish `source` at `destination` without clobbering an existing file:
+/// a hardlink, or an exclusive copy where the filesystem cannot hardlink.
+pub(crate) fn publish_without_clobbering(source: &Path, destination: &Path) -> io::Result<()> {
+    publish_exclusive(&RealOps, source, destination)
 }
 
 fn publish_exclusive(ops: &dyn SaveOps, source: &Path, destination: &Path) -> io::Result<()> {

@@ -1,6 +1,7 @@
 //! Project automation (`cargo xtask <command>`), replacing `scripts/release.py`
 //! and the Makefile targets of the Python version.
 
+mod android;
 mod ffmpeg;
 mod package;
 mod release;
@@ -34,6 +35,11 @@ Commands:
         Build the release binary and produce
         DIR/framecover-<version>-<platform>.<exe|tar.gz> (default DIR:
         release-assets/). Requires fetch-ffmpeg for the platform first.
+  android [--abi arm64-v8a|x86_64]... [--debug] [--output DIR]
+        Build the Android app library (cargo ndk) and APK (Gradle) as
+        DIR/framecover-<version>-android.apk (default DIR: release-assets/).
+        Needs the NDK, SDK, Gradle and scripts/android/build-ffmpeg.sh
+        output; the image from scripts/android/Dockerfile has them all.
 
 Environment:
   GIT_CLIFF   git-cliff executable (default: git-cliff on PATH)
@@ -87,6 +93,16 @@ fn dispatch(args: &[String]) -> Result<()> {
             };
             args.finish()?;
             package::package(&platform, output, skip_build, binary)
+        }
+        Some("android") => {
+            let output = args.value("--output")?.map(PathBuf::from);
+            let debug = args.flag("--debug");
+            let mut abis = Vec::new();
+            while let Some(abi) = args.value("--abi")? {
+                abis.push(abi);
+            }
+            args.finish()?;
+            android::build(&abis, debug, output)
         }
         Some("help" | "--help" | "-h") | None => {
             print!("{USAGE}");

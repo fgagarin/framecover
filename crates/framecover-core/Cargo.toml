@@ -6,7 +6,14 @@ license.workspace = true
 rust-version.workspace = true
 description = "FrameCover core: video probing, frame extraction and thumbnail embedding"
 
+[features]
+# Run FFmpeg inside the process (framecover-libav) instead of starting the
+# bundled ffmpeg / ffprobe executables. Required on Android; available on
+# Linux for parity tests. Needs scripts/android/build-ffmpeg.sh output.
+libav = ["dep:framecover-libav"]
+
 [dependencies]
+framecover-libav = { path = "../framecover-libav", optional = true }
 hex = "0.4.3"
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "webp", "bmp"] }
 jpeg-encoder = "0.7.1"

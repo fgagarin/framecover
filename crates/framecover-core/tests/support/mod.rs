@@ -3,8 +3,8 @@
 //! replacing the PyAV calls of the Python tests.
 #![allow(dead_code)]
 
+use framecover_core::ffmpeg::Invocation;
 use std::path::Path;
-use std::process::Command;
 
 use framecover_core::ffmpeg::{self, Tool};
 use framecover_core::models::{VideoFile, VideoFormat};
@@ -76,8 +76,7 @@ pub fn existing_thumbnail(path: &Path) -> Option<RgbImage> {
         let dir = tempfile::tempdir().ok()?;
         let out = dir.path().join("cover.bin");
         let mut cmd = ffmpeg::command(Tool::Ffmpeg).ok()?;
-        cmd.current_dir(dir.path())
-            .arg(format!("-dump_attachment:{}", stream.index))
+        cmd.arg(format!("-dump_attachment:{}", stream.index))
             .arg(&out)
             .arg("-i")
             .arg(path);
@@ -261,7 +260,7 @@ pub fn has_encoder(name: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// Plain `Command` for ffprobe with arbitrary args.
-pub fn ffprobe() -> Command {
+/// An ffprobe invocation with arbitrary args.
+pub fn ffprobe() -> Invocation {
     ffmpeg::command(Tool::Ffprobe).unwrap()
 }

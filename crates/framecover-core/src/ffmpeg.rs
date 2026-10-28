@@ -1,5 +1,8 @@
 //! Locating and running the bundled `ffmpeg` / `ffprobe` executables.
 //!
+//! With the `libav` feature (Android) the same [`Invocation`]s run inside
+//! this process through `framecover-libav` instead; see [`run`].
+//!
 //! Lookup order for each tool:
 //! 1. `FRAMECOVER_FFMPEG` / `FRAMECOVER_FFPROBE` environment variables
 //!    (`IMAGEIO_FFMPEG_EXE` is honoured for ffmpeg for compatibility);
@@ -126,9 +129,71 @@ fn search_path(name: &OsStr) -> Option<PathBuf> {
         .find(|p| p.is_file())
 }
 
-/// Build a [`Command`] for `tool` that never opens a console window.
-pub fn command(tool: Tool) -> Result<Command> {
-    Ok(no_window(Command::new(locate(tool)?)))
+/// One ffmpeg / ffprobe invocation. [`run`] runs it to completion: as a
+/// child process, or inside this process with the `libav` feature (Android,
+/// where no executables can be started). [`Invocation::into_command`] gives
+/// the child-process [`Command`] for callers that stream its output.
+#[derive(Debug, Clone)]
+pub struct Invocation {
+    tool: Tool,
+    args: Vec<std::ffi::OsString>,
+}
+
+impl Invocation {
+    pub fn arg(&mut self, arg: impl AsRef<OsStr>) -> &mut Self {
+        self.args.push(arg.as_ref().to_owned());
+        self
+    }
+
+    pub fn args<I, S>(&mut self, args: I) -> &mut Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        self.args
+            .extend(args.into_iter().map(|a| a.as_ref().to_owned()));
+        self
+    }
+
+    /// Run to completion and capture the output, whatever the exit status
+    /// (like [`Command::output`]; [`run`] also checks the status).
+    pub fn output(&mut self) -> Result<Output> {
+        #[cfg(not(feature = "libav"))]
+        return self.process_output();
+        #[cfg(feature = "libav")]
+        return in_process::run(self);
+    }
+
+    /// [`Invocation::output`] from a child process, whatever the backend.
+    fn process_output(&self) -> Result<Output> {
+        self.clone()
+            .into_command()?
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .map_err(|e| match e.kind() {
+                std::io::ErrorKind::NotFound => Error::FfmpegMissing(e.to_string()),
+                _ => Error::Io(e),
+            })
+    }
+
+    /// A child process running this invocation that never opens a console window.
+    pub fn into_command(self) -> Result<Command> {
+        let mut cmd = no_window(Command::new(locate(self.tool)?));
+        cmd.args(self.args);
+        Ok(cmd)
+    }
+}
+
+/// Start an invocation of `tool`. Fails early with [`Error::FfmpegMissing`]
+/// if the executable cannot be found (never with the `libav` feature).
+pub fn command(tool: Tool) -> Result<Invocation> {
+    #[cfg(not(feature = "libav"))]
+    locate(tool)?;
+    Ok(Invocation {
+        tool,
+        args: Vec::new(),
+    })
 }
 
 /// Apply `CREATE_NO_WINDOW` on Windows; a no-op elsewhere.
@@ -143,16 +208,12 @@ pub fn no_window(mut cmd: Command) -> Command {
     cmd
 }
 
-/// Run `cmd`, capturing output; non-zero exit becomes [`Error::Ffmpeg`].
-pub fn run(cmd: &mut Command) -> Result<Output> {
-    let output = cmd
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()
-        .map_err(|e| match e.kind() {
-            std::io::ErrorKind::NotFound => Error::FfmpegMissing(e.to_string()),
-            _ => Error::Io(e),
-        })?;
+/// Run `invocation`, capturing output; non-zero exit becomes [`Error::Ffmpeg`].
+pub fn run(invocation: &mut Invocation) -> Result<Output> {
+    check_status(invocation.output()?)
+}
+
+fn check_status(output: Output) -> Result<Output> {
     if output.status.success() {
         Ok(output)
     } else {
@@ -163,15 +224,94 @@ pub fn run(cmd: &mut Command) -> Result<Output> {
     }
 }
 
-/// Convenience: run ffmpeg with `-hide_banner -nostdin` and `args`.
+/// Convenience: run the ffmpeg *executable* with `-hide_banner -nostdin` and
+/// `args`. Even with the `libav` feature this starts the located binary: it
+/// is for test fixtures and tooling, which need encoders and lavfi sources
+/// the in-process build leaves out. Library code uses [`command`] and [`run`].
 pub fn ffmpeg<I, S>(args: I) -> Result<Output>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
-    let mut cmd = command(Tool::Ffmpeg)?;
+    let mut cmd = Invocation {
+        tool: Tool::Ffmpeg,
+        args: Vec::new(),
+    };
     cmd.args(["-hide_banner", "-nostdin"]).args(args);
-    run(&mut cmd)
+    check_status(cmd.process_output()?)
+}
+
+/// The `libav` backend: the same invocations, run by the ffmpeg / ffprobe
+/// front ends linked into this process (`framecover-libav`).
+#[cfg(feature = "libav")]
+mod in_process {
+    use std::ffi::OsString;
+    use std::os::unix::process::ExitStatusExt;
+    use std::process::{ExitStatus, Output};
+
+    use framecover_libav as libav;
+
+    use super::{Invocation, Tool};
+    use crate::error::Result;
+
+    pub(super) fn run(invocation: &Invocation) -> Result<Output> {
+        let args = &invocation.args;
+        // `-encoders` / `-decoders` print plain listings to stdout; build
+        // the same lines from the codec registry.
+        if let Some(listing) = args.iter().find(|a| *a == "-encoders" || *a == "-decoders") {
+            return Ok(Output {
+                status: ExitStatus::from_raw(0),
+                stdout: codec_listing(listing == "-encoders").into_bytes(),
+                stderr: Vec::new(),
+            });
+        }
+        // Standard output becomes a temporary file: ffprobe writes its report
+        // with `-o`, and ffmpeg's `-` output (always the last argument) is
+        // replaced by the file's path.
+        let dir = tempfile::tempdir()?;
+        let stdout_path = dir.path().join("stdout");
+        let mut args: Vec<OsString> = args.clone();
+        match invocation.tool {
+            Tool::Ffprobe => {
+                args.splice(
+                    0..0,
+                    [OsString::from("-o"), stdout_path.clone().into_os_string()],
+                );
+            }
+            Tool::Ffmpeg => {
+                if let Some(last) = args.last_mut().filter(|a| *a == "-") {
+                    *last = stdout_path.clone().into_os_string();
+                }
+            }
+        }
+        let tool = match invocation.tool {
+            Tool::Ffmpeg => libav::Tool::Ffmpeg,
+            Tool::Ffprobe => libav::Tool::Ffprobe,
+        };
+        let out = libav::run_tool(tool, &args);
+        Ok(Output {
+            status: ExitStatus::from_raw(out.code << 8),
+            stdout: std::fs::read(&stdout_path).unwrap_or_default(),
+            stderr: out.stderr.into_bytes(),
+        })
+    }
+
+    /// Lines shaped like `ffmpeg -encoders` output (` V..... name  Long name`).
+    fn codec_listing(encoders: bool) -> String {
+        let mut text = String::from(if encoders {
+            "Encoders:\n"
+        } else {
+            "Decoders:\n"
+        });
+        text.push_str(" ------\n");
+        for codec in libav::codecs(encoders) {
+            text.push_str(&format!(
+                " {}..... {:<20} {}\n",
+                codec.kind, codec.name, codec.long_name
+            ));
+        }
+        text
+    }
 }
 
 fn tail(s: &str, max: usize) -> &str {

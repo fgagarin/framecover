@@ -9,14 +9,17 @@
 //! accurately to `target - frame_step / 2` and taking the first frame that
 //! survives gives the same answer for constant-rate streams.
 
+#[cfg(not(feature = "libav"))]
 use std::io::{BufReader, Read};
 use std::path::Path;
+#[cfg(not(feature = "libav"))]
 use std::process::Stdio;
 
 use image::RgbImage;
 
 use crate::color;
 use crate::error::{Error, Result};
+#[cfg(not(feature = "libav"))]
 use crate::ffmpeg::{self, Tool};
 use crate::models::VideoFile;
 
@@ -79,6 +82,7 @@ pub(crate) fn seek_point_us(video: &VideoFile, offset_ms: u64) -> u64 {
     (offset_ms * 1000).saturating_sub(video.frame_step_ms.max(1) * 500)
 }
 
+#[cfg(not(feature = "libav"))]
 /// Decode frames of the first playable video stream from `seek_us` onwards
 /// and return the last one read (`max_frames` limits how many are decoded).
 fn decode(path: &Path, seek_us: u64, max_frames: Option<u32>) -> Result<Option<RgbImage>, String> {
@@ -97,11 +101,13 @@ fn decode(path: &Path, seek_us: u64, max_frames: Option<u32>) -> Result<Option<R
     if let Some(filter) = color::display_filter_for(path) {
         cmd.args(["-vf", filter]);
     }
-    cmd.args(["-c:v", "ppm", "-pix_fmt", "rgb24", "-f", "image2pipe", "-"])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    cmd.args(["-c:v", "ppm", "-pix_fmt", "rgb24", "-f", "image2pipe", "-"]);
 
     let mut child = cmd
+        .into_command()
+        .map_err(|e| e.to_string())?
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| format!("could not start ffmpeg: {e}"))?;
     let mut stderr = child.stderr.take().expect("piped stderr");
@@ -137,12 +143,50 @@ fn decode(path: &Path, seek_us: u64, max_frames: Option<u32>) -> Result<Option<R
     Ok(last)
 }
 
+/// [`decode`] with the in-process decoder (`libav` feature): the same seek,
+/// frame selection and RGB conversion as the ffmpeg command above.
+#[cfg(feature = "libav")]
+fn decode(path: &Path, seek_us: u64, max_frames: Option<u32>) -> Result<Option<RgbImage>, String> {
+    use crate::frame_stream::Clock;
+
+    let mut decoder = framecover_libav::Decoder::open(path, color::display_filter_for(path))
+        .map_err(|e| format!("ffmpeg failed: {e}"))?;
+    if seek_us > 0 {
+        let (num, den) = decoder.time_base();
+        let clock = Clock {
+            num,
+            den,
+            start_us: decoder.start_us(),
+        };
+        decoder.seek(seek_us, Some(clock.threshold(seek_us)));
+    }
+    let mut last = None;
+    let mut decoded = 0;
+    while max_frames.is_none_or(|max| decoded < max) {
+        match decoder.next_frame() {
+            Ok(Some(frame)) => {
+                last = Some(
+                    RgbImage::from_raw(frame.width, frame.height, frame.data)
+                        .ok_or("frame size does not match its data")?,
+                );
+                decoded += 1;
+            }
+            Ok(None) => break,
+            // Like a failing ffmpeg run: an error only when nothing was decoded.
+            Err(e) if last.is_none() => return Err(format!("ffmpeg failed: {e}")),
+            Err(_) => break,
+        }
+    }
+    Ok(last)
+}
+
 /// `us` microseconds as an ffmpeg `-ss` value (`S.ffffff`).
 pub(crate) fn format_secs(us: u64) -> String {
     format!("{}.{:06}", us / 1_000_000, us % 1_000_000)
 }
 
 /// Read one binary PPM (`P6`, maxval 255) image; `Ok(None)` at clean EOF.
+#[cfg(not(feature = "libav"))]
 fn read_ppm(reader: &mut impl Read) -> std::io::Result<Option<RgbImage>> {
     let invalid = |msg: &str| std::io::Error::new(std::io::ErrorKind::InvalidData, msg.to_owned());
     let mut fields: Vec<u32> = Vec::with_capacity(3);
@@ -197,6 +241,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg(not(feature = "libav"))]
     fn reads_concatenated_ppms() {
         let mut bytes = b"P6\n2 1\n255\n".to_vec();
         bytes.extend_from_slice(&[1, 2, 3, 4, 5, 6]);
@@ -212,6 +257,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "libav"))]
     fn rejects_truncated_ppm() {
         let mut r = &b"P6\n2 2\n255\n\x01\x02"[..];
         assert!(read_ppm(&mut r).is_err());

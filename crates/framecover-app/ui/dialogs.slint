@@ -77,6 +77,7 @@ export component DialogLayer inherits Rectangle {
     callback conflict-answer(int);
     callback find-cause();
     callback report-problem();
+    callback open-project-page();
 
     /// Local state of the overwrite warning and error dialog.
     in-out property <bool> suppress-warning;
@@ -182,12 +183,25 @@ export component DialogLayer inherits Rectangle {
     if data.kind == DialogKind.about: Card {
         title: "About FrameCover";
         card-width: 460px;
-        Body { text: data.text; }
-        HorizontalLayout {
-            alignment: center;
-            AboutSlint { max-width: 300px; }
+        // Scrolls when the window is short (a phone held sideways), so the
+        // buttons stay visible.
+        ScrollView {
+            min-height: 60px;
+            preferred-height: about-content.preferred-height;
+            about-content := VerticalLayout {
+                width: parent.width;
+                spacing: 12px;
+                Body { text: data.text; }
+                HorizontalLayout {
+                    alignment: center;
+                    AboutSlint { max-width: 300px; }
+                }
+            }
         }
-        ButtonRow {
+        HorizontalLayout {
+            spacing: 8px;
+            Button { text: "Project page ↗"; clicked => { root.open-project-page(); } }
+            Rectangle { horizontal-stretch: 1; }
             Button { text: "Close"; primary: true; clicked => { root.dismiss(); } }
         }
     }
@@ -209,7 +223,7 @@ export component DialogLayer inherits Rectangle {
             font-size: 12px;
             font-family: "Consolas, Menlo, DejaVu Sans Mono, monospace";
         }
-        HorizontalLayout {
+        if !Theme.mobile: HorizontalLayout {
             spacing: 8px;
             Button {
                 text: root.details-shown ? "Hide details" : "Show details";
@@ -236,6 +250,35 @@ export component DialogLayer inherits Rectangle {
                 Tooltip { text: @markdown("Open a new issue on GitHub"); }
             }
             Button { text: "Close"; primary: true; clicked => { root.dismiss(); } }
+        }
+        // Phones: the five buttons do not fit one row.
+        if Theme.mobile: VerticalLayout {
+            spacing: 8px;
+            HorizontalLayout {
+                spacing: 8px;
+                Button {
+                    text: root.details-shown ? "Hide details" : "Show details";
+                    clicked => { root.details-shown = !root.details-shown; }
+                }
+                Button {
+                    text: root.copied ? "Copied" : "Copy stack trace";
+                    clicked => {
+                        details.select-all();
+                        details.copy();
+                        details.clear-selection();
+                        root.copied = true;
+                    }
+                }
+            }
+            HorizontalLayout {
+                spacing: 8px;
+                Button { text: "Find the cause"; clicked => { root.find-cause(); } }
+                Button { text: "Report a problem"; clicked => { root.report-problem(); } }
+            }
+            HorizontalLayout {
+                alignment: end;
+                Button { text: "Close"; primary: true; clicked => { root.dismiss(); } }
+            }
         }
     }
 }
