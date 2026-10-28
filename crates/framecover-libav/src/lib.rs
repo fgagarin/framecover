@@ -98,11 +98,14 @@ extern "C" fn log_line(level: c_int, line: *const c_char) {
         return;
     }
     let text = text.trim_end();
-    match level {
-        ..=AV_LOG_ERROR => log::error!(target: "libav", "{text}"),
-        ..=AV_LOG_WARNING => log::warn!(target: "libav", "{text}"),
-        ..=AV_LOG_INFO => log::info!(target: "libav", "{text}"),
-        _ => log::debug!(target: "libav", "{text}"),
+    if level <= AV_LOG_ERROR {
+        log::error!(target: "libav", "{text}");
+    } else if level <= AV_LOG_WARNING {
+        log::warn!(target: "libav", "{text}");
+    } else if level <= AV_LOG_INFO {
+        log::info!(target: "libav", "{text}");
+    } else {
+        log::debug!(target: "libav", "{text}");
     }
 }
 
