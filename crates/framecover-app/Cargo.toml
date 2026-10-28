@@ -19,28 +19,34 @@ path = "src/main.rs"
 [dependencies]
 framecover-core = { path = "../framecover-core" }
 # GUI toolkit, used under the Slint Royalty-free License 2.0 (see the About
-# dialog, which shows the required AboutSlint attribution).
+# dialog, which shows the required AboutSlint attribution). The backend is
+# chosen per platform below.
 slint = { version = "1.18.1", default-features = false, features = [
     "std",
     "compat-1-2",
     "accessibility",
-    "backend-winit",
     "renderer-femtovg",
     "renderer-software",
-    "raw-window-handle-06",
-    # Access to winit window events for OS file drag-and-drop.
-    "unstable-winit-030",
 ] }
-rfd = "0.17.2"
 image = { version = "0.25.10", default-features = false }
 rand = "0.9.2"
 dirs = "6.0.0"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 log = "0.4.34"
+tempfile = "3.27.0"
+
+# Desktop: winit windows, native file dialogs, the CLI and embedded FFmpeg.
+[target.'cfg(not(target_os = "android"))'.dependencies]
+slint = { version = "1.18.1", default-features = false, features = [
+    "backend-winit",
+    "raw-window-handle-06",
+    # Access to winit window events for OS file drag-and-drop.
+    "unstable-winit-030",
+] }
+rfd = "0.17.2"
 env_logger = { version = "0.11.11", default-features = false, features = ["auto-color", "humantime"] }
 liblzma = { version = "0.4.9", features = ["static"] }
-tempfile = "3.27.0"
 clap = { version = "4.6.7", default-features = false, features = [
     "std",
     "derive",
@@ -49,6 +55,14 @@ clap = { version = "4.6.7", default-features = false, features = [
     "error-context",
     "suggestions",
 ] }
+
+# Android: NativeActivity, FFmpeg linked in (no executables can be started),
+# logcat, and JNI calls into the Java side (android/).
+[target.'cfg(target_os = "android")'.dependencies]
+slint = { version = "1.18.1", default-features = false, features = ["backend-android-activity-06"] }
+framecover-core = { path = "../framecover-core", features = ["libav"] }
+android_logger = { version = "0.15", default-features = false }
+jni-sys = "0.3.1"
 
 [target."cfg(windows)".dependencies]
 windows-sys = { version = "0.61.2", features = [

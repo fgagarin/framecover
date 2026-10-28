@@ -12,8 +12,10 @@ use framecover_core::converter::FfmpegVideoConverter;
 use framecover_core::frame_stream::{FfmpegFrameStream, FrameSource};
 use framecover_core::frames::{FfmpegFrameExtractor, FrameExtractor};
 use framecover_core::loader::{FfprobeVideoLoader, VideoLoader};
+#[cfg(not(target_os = "android"))]
 use framecover_core::platform;
 use framecover_core::thumbnail_writer::{FormatDispatchThumbnailWriter, ThumbnailWriter};
+#[cfg(not(target_os = "android"))]
 use framecover_core::update_checker::{GitHubUpdateChecker, UpdateChecker as CoreChecker};
 use framecover_core::{ApplyResult, Error, ProgressFn, UpdateInfo, VideoFile};
 use image::RgbImage;
@@ -95,14 +97,26 @@ impl Services {
             writer: Arc::new(FormatDispatchThumbnailWriter),
             copier: Arc::new(CoreCopySaver),
             converter: Arc::new(CoreConverter),
+            // Releases are desktop downloads; there is nothing to update to
+            // on Android yet.
+            #[cfg(not(target_os = "android"))]
             update_checker: Some(Arc::new(CoreUpdateChecker(GitHubUpdateChecker::new()))),
+            #[cfg(target_os = "android")]
+            update_checker: None,
+            #[cfg(not(target_os = "android"))]
             invalidator: Arc::new(CoreCacheInvalidator(platform::get_cache_invalidator())),
+            #[cfg(target_os = "android")]
+            invalidator: Arc::new(GalleryPublisher),
+            #[cfg(not(target_os = "android"))]
             desktop: Arc::new(CoreDesktop),
+            #[cfg(target_os = "android")]
+            desktop: Arc::new(AndroidDesktop),
         }
     }
 }
 
 /// Windows taskbar grouping / icon identity (`FrameCover.Application`).
+#[cfg(not(target_os = "android"))]
 pub fn set_app_user_model_id() {
     framecover_core::platform::set_app_user_model_id();
 }
@@ -150,24 +164,30 @@ impl VideoConverter for CoreConverter {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 struct CoreUpdateChecker(GitHubUpdateChecker);
 
+#[cfg(not(target_os = "android"))]
 impl UpdateChecker for CoreUpdateChecker {
     fn check(&self, current_version: &str) -> Result<UpdateInfo, Error> {
         CoreChecker::check(&self.0, current_version)
     }
 }
 
+#[cfg(not(target_os = "android"))]
 struct CoreCacheInvalidator(Box<dyn platform::CacheInvalidator>);
 
+#[cfg(not(target_os = "android"))]
 impl CacheInvalidator for CoreCacheInvalidator {
     fn invalidate(&self, path: &Path, thumbnail: Option<&RgbImage>) {
         self.0.invalidate(path, thumbnail);
     }
 }
 
+#[cfg(not(target_os = "android"))]
 struct CoreDesktop;
 
+#[cfg(not(target_os = "android"))]
 impl Desktop for CoreDesktop {
     fn reveal_in_file_manager(&self, path: &Path) {
         if let Err(err) = platform::reveal_in_file_manager(path) {
@@ -179,6 +199,36 @@ impl Desktop for CoreDesktop {
         platform::open_url(url)
             .map_err(|err| log::warn!("could not open {url}: {err}"))
             .is_ok()
+    }
+}
+
+/// Android: saved copies live in the app's cache; publishing them to the
+/// shared `Movies/FrameCover` collection is what makes them appear in the
+/// gallery (the counterpart of refreshing a desktop thumbnail cache).
+#[cfg(target_os = "android")]
+struct GalleryPublisher;
+
+#[cfg(target_os = "android")]
+impl CacheInvalidator for GalleryPublisher {
+    fn invalidate(&self, path: &Path, _thumbnail: Option<&RgbImage>) {
+        if let Err(err) = crate::android::publish_video(path) {
+            log::error!("could not publish {} to the gallery: {err}", path.display());
+        }
+    }
+}
+
+/// Android: "reveal" opens the published copy; links open in the browser.
+#[cfg(target_os = "android")]
+struct AndroidDesktop;
+
+#[cfg(target_os = "android")]
+impl Desktop for AndroidDesktop {
+    fn reveal_in_file_manager(&self, path: &Path) {
+        crate::android::view_published(path);
+    }
+
+    fn open_url(&self, url: &str) -> bool {
+        crate::android::open_url(url)
     }
 }
 

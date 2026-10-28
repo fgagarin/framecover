@@ -145,7 +145,7 @@ impl Backend for RealBackend {
         })
     }
     fn locate_ffmpeg(&self) -> std::result::Result<(), String> {
-        match ffmpeg::locate(Tool::Ffmpeg) {
+        match ffmpeg::command(Tool::Ffmpeg) {
             Ok(_) => Ok(()),
             Err(Error::FfmpegMissing(m)) => Err(m),
             Err(e) => Err(e.to_string()),
@@ -368,8 +368,9 @@ pub(crate) fn convert_with(
         if overwrite {
             std::fs::rename(&temporary, &destination_path)?;
         } else {
-            // Publish atomically without clobbering a concurrently created file.
-            match std::fs::hard_link(&temporary, &destination_path) {
+            // Publish without clobbering a concurrently created file (a
+            // hardlink, or an exclusive copy where hardlinks are refused).
+            match crate::save_copy::publish_without_clobbering(&temporary, &destination_path) {
                 Ok(()) => {}
                 Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
                     return Err(Error::DestinationExists(destination_path.clone()));

@@ -4,7 +4,7 @@
 import { Theme } from "theme.slint";
 import { StartScreen } from "start-screen.slint";
 import { AppFooter } from "footer.slint";
-import { PathBar, Preview, Filmstrip, Timeline, FilmTile } from "editor.slint";
+import { PathBar, Preview, Filmstrip, Timeline, PlayButton, FilmTile } from "editor.slint";
 import { DialogLayer, DialogData, DialogKind } from "dialogs.slint";
 
 export { FilmTile, DialogData, DialogKind }
@@ -12,12 +12,18 @@ export { FilmTile, DialogData, DialogKind }
 export component AppWindow inherits Window {
     title: "FrameCover";
     icon: @image-url("../../../icon.png");
-    min-width: 900px;
-    min-height: 560px;
+    min-width: root.mobile ? 0px : 900px;
+    min-height: root.mobile ? 0px : 560px;
     preferred-width: 900px;
     preferred-height: 560px;
     background: Theme.window-background;
-    default-font-size: 13px;
+    default-font-size: root.mobile ? 15px : 13px;
+
+    // Phone layout (Android): one full-screen window, touch-sized controls,
+    // no keyboard shortcuts or drag-and-drop.
+    in property <bool> mobile;
+    init => { Theme.mobile = root.mobile; }
+    changed mobile => { Theme.mobile = root.mobile; }
 
     // Screens
     in property <bool> editor-visible;
@@ -60,6 +66,8 @@ export component AppWindow inherits Window {
     in property <bool> timeline-has-duration;
     in property <float> timeline-fill;
     in property <string> timeline-label: "0:00 / 0:00";
+    in property <bool> playing;
+    in property <bool> play-enabled;
 
     // Dialogs
     in property <DialogData> dialog;
@@ -76,6 +84,7 @@ export component AppWindow inherits Window {
     callback film-resized(length);
     callback timeline-pointer(float, bool);
     callback step-frame(int);
+    callback toggle-playback();
     callback show-shortcuts();
     callback show-about();
     callback update-clicked();
@@ -121,6 +130,10 @@ export component AppWindow inherits Window {
                 root.step-frame(1);
                 return accept;
             }
+            if event.text == " " && !event.modifiers.control && !event.modifiers.alt {
+                root.toggle-playback();
+                return accept;
+            }
             if event.modifiers.control && (event.text == "o" || event.text == "O") {
                 root.open-file();
                 return accept;
@@ -141,8 +154,12 @@ export component AppWindow inherits Window {
         }
 
         VerticalLayout {
-            padding: 16px;
-            spacing: 12px;
+            // Phones: keep clear of the status and navigation bars.
+            padding-left: (root.mobile ? 8px : 16px) + root.safe-area-insets.left;
+            padding-right: (root.mobile ? 8px : 16px) + root.safe-area-insets.right;
+            padding-top: (root.mobile ? 8px : 16px) + root.safe-area-insets.top;
+            padding-bottom: (root.mobile ? 8px : 16px) + root.safe-area-insets.bottom;
+            spacing: root.mobile ? 8px : 12px;
 
             if !root.editor-visible: StartScreen {
                 vertical-stretch: 1;
@@ -153,7 +170,8 @@ export component AppWindow inherits Window {
                 open-clicked => { root.open-file(); }
             }
 
-            if root.editor-visible: PathBar {
+            // Phones: the open button is in the Frame panel's header.
+            if root.editor-visible && !root.mobile: PathBar {
                 path: root.video-path;
                 open-clicked => { root.open-file(); }
                 path-clicked => { root.path-clicked(); }
@@ -181,21 +199,39 @@ export component AppWindow inherits Window {
                 open-image => { root.open-image(); }
                 use-video-frame => { root.use-video-frame(); }
                 set-image-crop(crop) => { root.set-image-crop(crop); }
+                step-frame(direction) => { root.step-frame(direction); }
+                open-file => { root.open-file(); }
+                show-about => { root.show-about(); }
             }
             if root.editor-visible: Filmstrip {
                 tiles: root.film-tiles;
                 clicked(x) => { root.film-clicked(x); }
                 resized(w) => { root.film-resized(w); }
             }
-            if root.editor-visible: Timeline {
-                enabled: root.timeline-enabled;
-                has-duration: root.timeline-has-duration;
-                fill: root.timeline-fill;
-                label: root.timeline-label;
-                pointer(ratio, released) => { root.timeline-pointer(ratio, released); }
+            if root.editor-visible: HorizontalLayout {
+                spacing: 8px;
+                // The button is centred on the track.
+                Rectangle {
+                    width: play.width;
+                    play := PlayButton {
+                        y: timeline.track-y - self.height / 2;
+                        playing: root.playing;
+                        enabled: root.play-enabled;
+                        clicked => { root.toggle-playback(); }
+                    }
+                }
+                timeline := Timeline {
+                    min-track-y: play.height / 2;
+                    enabled: root.timeline-enabled;
+                    has-duration: root.timeline-has-duration;
+                    fill: root.timeline-fill;
+                    label: root.timeline-label;
+                    pointer(ratio, released) => { root.timeline-pointer(ratio, released); }
+                }
             }
 
-            AppFooter {
+            // Phones show these in the top-bar menu of the editor.
+            if !root.mobile || !root.editor-visible: AppFooter {
                 version: root.version;
                 project-url: root.project-url;
                 status-visible: root.update-visible;
@@ -227,6 +263,7 @@ export component AppWindow inherits Window {
             conflict-answer(choice) => { root.conflict-answer(choice); }
             find-cause => { root.error-find-cause(); }
             report-problem => { root.error-report-problem(); }
+            open-project-page => { root.open-project-page(); }
         }
     }
 }

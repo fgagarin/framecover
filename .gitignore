@@ -84,3 +84,7 @@ Thumbs.db
 
 # Claude Code agent worktrees
 /.claude/worktrees/
+
+# Android (Gradle state; android/build/ and app/build/ match build/ above)
+/android/.gradle/
+/android/local.properties

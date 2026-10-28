@@ -1,0 +1,27 @@
+[package]
+name = "framecover-libav"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "In-process FFmpeg (libav*) for framecover-core's `libav` backend"
+publish = false
+build = "build.rs"
+# Links the static libraries from scripts/android/build-ffmpeg.sh
+# (vendor/ffmpeg/libav/<platform>, or FRAMECOVER_LIBAV_DIR).
+links = "framecover_libav"
+
+[lib]
+# Only links where the FFmpeg build exists; framecover-core's tests (with
+# `--features libav`) exercise it.
+test = false
+doctest = false
+
+[dependencies]
+log = "0.4.34"
+
+[build-dependencies]
+cc = "1.10.0"
+
+[lints]
+workspace = true

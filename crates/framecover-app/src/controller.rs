@@ -18,12 +18,13 @@ use rand::Rng;
 use rand::rngs::StdRng;
 
 use crate::error_report::{ErrorReport, Operation, build_operation_error_report};
-use crate::timeline::{Timeline, format_position};
+use crate::timeline::{Timeline, format_mss, format_position};
 use crate::workers::SaveJob;
 
 pub const LOADED_WINDOW_SIZE: (f32, f32) = (1280.0, 720.0);
 
 /// Extensions offered by the "Open video" dialog (same list as the Qt filter).
+#[cfg_attr(target_os = "android", allow(dead_code))]
 pub const VIDEO_EXTENSIONS: &[&str] = &[
     "mp4", "mov", "m4v", "mkv", "webm", "avi", "flv", "m2ts", "mts", "ts", "mpeg", "mpg", "wmv",
     "vob", "mxf", "3gp", "ogv",
@@ -70,6 +71,7 @@ pub fn shortcuts_text() -> String {
 {m}+S  Save preview as thumbnail\n\
 {m}+I  Use an image file as the thumbnail\n\
 Left / Right  Previous / next frame\n\
+Space  Play / pause\n\
 Shift+/  Show keyboard shortcuts"
     )
 }
@@ -415,6 +417,16 @@ pub struct State {
     pub update: UpdateIndicator,
     pub update_check_active: bool,
     pub dialogs: Vec<Dialog>,
+    /// Set while the play button advances the timeline in real time.
+    pub playback: Option<Playback>,
+}
+
+/// Real-time playback from the timeline position.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Playback {
+    /// `(clock ms, position ms)` at the first tick: later ticks move the
+    /// timeline by the clock time elapsed since.
+    origin: Option<(u64, u64)>,
 }
 
 impl State {
@@ -426,6 +438,14 @@ impl State {
     /// (requests are coalesced), so dragging is never interrupted.
     pub fn timeline_enabled(&self) -> bool {
         self.video.is_some() && !self.saving && !self.converting
+    }
+
+    pub fn playing(&self) -> bool {
+        self.playback.is_some()
+    }
+
+    pub fn play_enabled(&self) -> bool {
+        self.timeline_enabled() && self.timeline.duration_ms() > 0
     }
 
     pub fn save_enabled(&self) -> bool {
@@ -481,6 +501,20 @@ impl State {
         }
     }
 
+    /// Phone timeline label: the shown frame's exact time instead of the
+    /// rounded position (phones have no Frame panel title).
+    pub fn frame_timeline_label(&self) -> String {
+        let ms = self
+            .candidate
+            .as_ref()
+            .map_or(self.timeline.position_ms(), |c| c.1);
+        format!(
+            "{} / {}",
+            format_position(ms),
+            format_mss(self.timeline.duration_ms())
+        )
+    }
+
     pub fn saved_label(&self) -> Option<String> {
         self.last_save_duration.map(|s| format!("Saved in {s:.1}s"))
     }
@@ -521,6 +555,12 @@ pub enum Event {
         released: bool,
     },
     StepFrame(i32),
+    /// Play/pause button or Space.
+    TogglePlayback,
+    /// Playback timer; `now_ms` is a monotonic clock.
+    PlaybackTick {
+        now_ms: u64,
+    },
     FilmstripSelected(u64),
     /// "Use image…" button or Ctrl+I.
     OpenImageRequested,
@@ -623,6 +663,7 @@ pub enum Effect {
     CheckUpdates,
     OpenReleaseUrl(String),
     RevealInFolder(PathBuf),
+    #[cfg_attr(target_os = "android", allow(dead_code))]
     ResizeWindow(f32, f32),
 }
 
@@ -672,6 +713,7 @@ impl Controller {
                 update: UpdateIndicator::not_checked(has_update_checker),
                 update_check_active: false,
                 dialogs: Vec::new(),
+                playback: None,
             },
             writer,
             has_update_checker,
@@ -683,6 +725,25 @@ impl Controller {
     }
 
     pub fn handle(&mut self, event: Event) -> Vec<Effect> {
+        // Choosing a frame or another source, saving or a failure pauses.
+        if matches!(
+            event,
+            Event::OpenFileRequested
+                | Event::OpenPath(_)
+                | Event::VideoLoaded { .. }
+                | Event::LoadFailed { .. }
+                | Event::TimelinePointer { .. }
+                | Event::StepFrame(_)
+                | Event::FilmstripSelected(_)
+                | Event::OpenImageRequested
+                | Event::OpenImage(_)
+                | Event::FrameExtractFailed { .. }
+                | Event::SaveCopyClicked
+                | Event::OverwriteClicked
+                | Event::UnhandledError(_)
+        ) {
+            self.state.playback = None;
+        }
         match event {
             Event::Startup => self.check_for_updates(),
             Event::OpenFileRequested => self.open_file_dialog(),
@@ -692,6 +753,8 @@ impl Controller {
             Event::LoadFailed { token, details } => self.on_load_error(token, &details),
             Event::TimelinePointer { ratio, released } => self.on_timeline_pointer(ratio, released),
             Event::StepFrame(direction) => self.step_selected_frame(direction),
+            Event::TogglePlayback => self.toggle_playback(),
+            Event::PlaybackTick { now_ms } => self.on_playback_tick(now_ms),
             Event::FilmstripSelected(ms) => self.on_filmstrip_position_selected(ms),
             Event::OpenImageRequested => self.open_image_dialog(),
             Event::OpenImage(path) => self.open_image(path),
@@ -1157,6 +1220,48 @@ longer and change its video codec.\n\nReason: {reason}"
         if let Some(next) = step_position(video, s.timeline.position_ms(), direction) {
             s.timeline.set_position(next);
             self.on_scrub(next);
+        }
+    }
+
+    fn toggle_playback(&mut self) {
+        let s = &mut self.state;
+        if s.playback.take().is_some() || !s.play_enabled() || !s.dialogs.is_empty() {
+            return;
+        }
+        let Some(video) = &s.video else { return };
+        s.cover = None;
+        // Play from the start again once the end was reached.
+        if step_position(video, s.timeline.position_ms(), 1).is_none() {
+            s.timeline.set_position(0);
+            self.on_scrub(0);
+        }
+        self.state.playback = Some(Playback::default());
+    }
+
+    fn on_playback_tick(&mut self, now_ms: u64) {
+        let s = &mut self.state;
+        if s.playback.is_none() {
+            return;
+        }
+        if !s.play_enabled() || !s.dialogs.is_empty() {
+            s.playback = None;
+            return;
+        }
+        let position = s.timeline.position_ms();
+        let Some(playback) = &mut s.playback else {
+            return;
+        };
+        let (start_ms, start_position) = *playback.origin.get_or_insert((now_ms, position));
+        let duration = s.timeline.duration_ms();
+        let target = (start_position + now_ms.saturating_sub(start_ms)).min(duration);
+        if target == duration {
+            s.playback = None;
+        }
+        if target != s.timeline.position_ms() {
+            s.timeline.set_position(target);
+            // Requests coalesce as when dragging: frames that cannot be
+            // decoded in time are skipped.
+            self.on_scrub(target);
         }
     }
 
@@ -1701,6 +1806,7 @@ mod tests {
             h.s().frame_title(),
             format!("Frame ({})", format_position(3000))
         );
+        assert!(h.s().frame_timeline_label().starts_with("0:03.000 / "));
         assert_eq!(h.extracts(), [2000]);
         assert!(!h.s().save_enabled(), "saving waits for the latest frame");
         h.complete_extract();
@@ -1724,6 +1830,74 @@ mod tests {
         });
         assert!(h.s().current_frame.is_none());
         assert_eq!(h.extracts(), [h.s().timeline.position_ms()]);
+    }
+
+    #[test]
+    fn playback_follows_the_clock_and_skips_frames_still_decoding() {
+        let mut h = Harness::new();
+        h.loaded();
+        h.send(Event::FilmstripSelected(1000));
+        h.complete_extract();
+        h.send(Event::TogglePlayback);
+        assert!(h.s().playing());
+        // The first tick only starts the clock.
+        h.send(Event::PlaybackTick { now_ms: 50_000 });
+        assert!(h.extracts().is_empty());
+        h.send(Event::PlaybackTick { now_ms: 50_040 });
+        assert_eq!(h.extracts(), [1040]);
+        // Decoding is slower than real time: the timeline moves on and the
+        // latest position is requested once the frame arrives.
+        h.send(Event::PlaybackTick { now_ms: 50_120 });
+        assert!(h.extracts().is_empty());
+        assert_eq!(h.s().timeline.position_ms(), 1120);
+        h.complete_extract();
+        assert_eq!(h.extracts(), [1120]);
+        h.complete_extract();
+
+        h.send(Event::TogglePlayback);
+        assert!(!h.s().playing());
+        h.send(Event::PlaybackTick { now_ms: 51_000 });
+        assert_eq!(h.s().timeline.position_ms(), 1120);
+    }
+
+    #[test]
+    fn playback_stops_at_the_end_and_restarts_from_the_start() {
+        let mut h = Harness::new();
+        h.loaded();
+        h.send(Event::FilmstripSelected(4900));
+        h.complete_extract();
+        h.send(Event::TogglePlayback);
+        h.send(Event::PlaybackTick { now_ms: 0 });
+        h.send(Event::PlaybackTick { now_ms: 500 });
+        assert_eq!(h.s().timeline.position_ms(), 5000);
+        assert!(!h.s().playing());
+        h.complete_extract();
+
+        h.send(Event::TogglePlayback);
+        assert!(h.s().playing());
+        assert_eq!(h.s().timeline.position_ms(), 0);
+        assert_eq!(h.extracts(), [0]);
+    }
+
+    #[test]
+    fn choosing_a_frame_pauses_playback() {
+        let mut h = Harness::new();
+        h.loaded();
+        for event in [
+            Event::StepFrame(1),
+            Event::FilmstripSelected(2000),
+            Event::TimelinePointer {
+                ratio: 0.5,
+                released: false,
+            },
+            Event::SaveCopyClicked,
+        ] {
+            h.send(Event::TogglePlayback);
+            assert!(h.s().playing());
+            h.send(event);
+            assert!(!h.s().playing());
+            h.complete_extract();
+        }
     }
 
     #[test]

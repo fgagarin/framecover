@@ -225,10 +225,7 @@ fn attachment(path: &Path, index: usize) -> Result<RgbImage> {
         .arg(path);
     // ffmpeg dumps the attachment, then exits non-zero because no output
     // file was given; only the dumped file matters.
-    let _ = cmd
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()?;
+    let _ = ffmpeg::run(&mut cmd);
     let bytes = std::fs::read(&target)?;
     if bytes.is_empty() {
         return Err(Error::Other("empty attachment".into()));

@@ -189,3 +189,60 @@ export component PictureGlyph inherits Rectangle {
         fill: root.tint;
     }
 }
+
+// Play and pause glyphs of the playback button.
+export component PlayGlyph inherits Rectangle {
+    in property <brush> tint: Theme.text;
+    IconPath {
+        viewbox-width: 24;
+        viewbox-height: 24;
+        commands: "M8 5.5 Q8 4.3 9 4.9 L19 11.2 Q20 12 19 12.8 L9 19.1 Q8 19.7 8 18.5 Z";
+        fill: root.tint;
+    }
+}
+
+export component PauseGlyph inherits Rectangle {
+    in property <brush> tint: Theme.text;
+    IconPath {
+        viewbox-width: 24;
+        viewbox-height: 24;
+        commands: "M7 5 L10 5 L10 19 L7 19 Z M14 5 L17 5 L17 19 L14 19 Z";
+        fill: root.tint;
+    }
+}
+
+// Circled "i" of the phone About button.
+export component InfoGlyph inherits Rectangle {
+    in property <brush> tint: Theme.text;
+    IconPath {
+        viewbox-width: 24;
+        viewbox-height: 24;
+        commands: "M12 3 A9 9 0 1 0 12.01 3 Z M12 11 L12 17 M12 7.5 L12 7.6";
+        stroke: root.tint;
+        stroke-width: 1.8px * root.width / 24px;
+    }
+}
+
+// Picture inside the frame with bars at the sides: "Fit to frame".
+export component FitGlyph inherits Rectangle {
+    in property <brush> tint: Theme.text;
+    IconPath {
+        viewbox-width: 24;
+        viewbox-height: 24;
+        commands: "M2 5 L22 5 L22 19 L2 19 Z M8 5 L8 19 M16 5 L16 19";
+        stroke: root.tint;
+        stroke-width: 1.8px * root.width / 24px;
+    }
+}
+
+// Crop marks: "Crop to frame".
+export component CropGlyph inherits Rectangle {
+    in property <brush> tint: Theme.text;
+    IconPath {
+        viewbox-width: 24;
+        viewbox-height: 24;
+        commands: "M6 2 L6 18 L22 18 M2 6 L18 6 L18 22";
+        stroke: root.tint;
+        stroke-width: 1.8px * root.width / 24px;
+    }
+}

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/framecover-core", "crates/framecover-app", "xtask"]
+members = ["crates/framecover-core", "crates/framecover-libav", "crates/framecover-app", "xtask"]
 
 [workspace.package]
 version = "0.3.1"

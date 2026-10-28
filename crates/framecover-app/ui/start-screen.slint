@@ -164,8 +164,8 @@ export component StartScreen inherits VerticalLayout {
     in property <bool> drops-accepted: true;
     callback open-clicked();
 
-    padding-left: 40px;
-    padding-right: 40px;
+    padding-left: Theme.mobile ? 8px : 40px;
+    padding-right: Theme.mobile ? 8px : 40px;
     padding-top: 8px;
     padding-bottom: 8px;
     spacing: 0px;
@@ -173,7 +173,7 @@ export component StartScreen inherits VerticalLayout {
     Rectangle { vertical-stretch: 1; }
     Text {
         text: "Create a preview from any video";
-        font-size: 30px;
+        font-size: Theme.mobile ? 24px : 30px;
         font-weight: 700;
         horizontal-alignment: center;
         wrap: word-wrap;
@@ -187,8 +187,9 @@ export component StartScreen inherits VerticalLayout {
         horizontal-alignment: center;
         wrap: word-wrap;
     }
-    Rectangle { height: 28px; }
-    HorizontalLayout {
+    Rectangle { height: Theme.mobile ? 20px : 28px; }
+    // The three steps need about 600px; phones show the drop zone only.
+    if !Theme.mobile: HorizontalLayout {
         alignment: center;
         spacing: 0px;
         Step {
@@ -206,7 +207,7 @@ export component StartScreen inherits VerticalLayout {
             StepIcon { SavePreviewIcon { } }
         }
     }
-    Rectangle { height: 28px; }
+    if !Theme.mobile: Rectangle { height: 28px; }
     DropZone {
         vertical-stretch: 2;
         title: root.drop-title;

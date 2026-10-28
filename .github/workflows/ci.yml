@@ -87,6 +87,40 @@ jobs:
         if: runner.os != 'Linux'
         run: cargo test --workspace --locked
 
+  # Android: FFmpeg runs in-process (framecover-core `libav` feature). The
+  # core tests run against that backend on Linux, then the APK is built.
+  android:
+    name: Android (libav tests + APK)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build the Android build image
+        run: docker build -t framecover-android scripts/android
+      - name: Cache in-process FFmpeg builds
+        id: libav-cache
+        uses: actions/cache@v4
+        with:
+          path: vendor/ffmpeg/libav
+          key: libav-${{ hashFiles('scripts/android/**') }}
+      - name: Build FFmpeg libraries
+        if: steps.libav-cache.outputs.cache-hit != 'true'
+        run: >
+          docker run --rm -v "$PWD:/src" framecover-android
+          scripts/android/build-ffmpeg.sh linux-x64 android-x86_64 android-arm64-v8a
+      - name: Core tests with the libav backend
+        # Fixtures still come from the pinned ffmpeg executables.
+        run: >
+          docker run --rm -v "$PWD:/src" framecover-android bash -c
+          'cargo xtask fetch-ffmpeg linux-x64 && cargo test -p framecover-core --features libav --locked'
+      - name: Build the APK
+        run: docker run --rm -v "$PWD:/src" framecover-android cargo xtask android
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: framecover-android
+          path: release-assets/*.apk
+          if-no-files-found: error
+
   dist:
     name: Build distribution (${{ matrix.platform }})
     needs: [lint, test]

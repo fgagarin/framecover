@@ -25,6 +25,8 @@
 //! so the returned pixels are identical. Any session failure falls back to a
 //! one-off [`FfmpegFrameExtractor`] call for that request.
 
+#![cfg_attr(feature = "libav", allow(dead_code))]
+
 use std::collections::{BTreeMap, VecDeque};
 use std::io::{BufRead, BufReader, Read};
 use std::path::Path;
@@ -40,6 +42,16 @@ use crate::error::Result;
 use crate::ffmpeg::{self, Tool};
 use crate::frames::{FfmpegFrameExtractor, FrameExtractor, format_secs, seek_point_us};
 use crate::models::VideoFile;
+
+#[cfg(feature = "libav")]
+mod native;
+
+/// Where frames come from: an ffmpeg child, or (`libav` feature) a decoder
+/// in this process. The ffmpeg-child code stays compiled for its tests.
+#[cfg(not(feature = "libav"))]
+type ActiveSession = Session;
+#[cfg(feature = "libav")]
+type ActiveSession = native::NativeSession;
 
 /// A stateful frame provider for one video, used for interactive scrubbing.
 pub trait FrameSource: Send {
@@ -103,7 +115,7 @@ pub struct FfmpegFrameStream {
     video: VideoFile,
     cache: FrameCache,
     clock: Option<Clock>,
-    session: Option<Session>,
+    session: Option<ActiveSession>,
     /// Selection threshold of the previous request (detects backward steps).
     previous: Option<i64>,
     costs: Costs,
@@ -269,7 +281,7 @@ impl FfmpegFrameStream {
     fn restart(&mut self, start_us: u64) -> Result<(), String> {
         // Stop the old child first: only one decoder runs at a time.
         self.session = None;
-        let mut session = Session::spawn(&self.video.path, start_us)?;
+        let mut session = ActiveSession::spawn(&self.video.path, start_us)?;
         self.sessions_started += 1;
         if let Some(clock) = session.clock()? {
             if self.clock.is_some_and(|known| known != clock) {
@@ -373,10 +385,10 @@ impl FrameSource for FfmpegFrameStream {
 /// Stream time base plus container start time: converts seek points to the
 /// stream's timestamp ticks exactly like ffmpeg does.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct Clock {
-    num: i64,
-    den: i64,
-    start_us: i64,
+pub(crate) struct Clock {
+    pub(crate) num: i64,
+    pub(crate) den: i64,
+    pub(crate) start_us: i64,
 }
 
 impl Clock {
@@ -393,13 +405,13 @@ impl Clock {
     }
 
     /// Timestamp offset ffmpeg removes from a session seeking to `seek_us`.
-    fn origin(&self, seek_us: u64) -> i64 {
+    pub(crate) fn origin(&self, seek_us: u64) -> i64 {
         self.ticks((seek_us as i64).saturating_add(self.start_us))
     }
 
     /// Smallest timestamp an accurate seek to `seek_us` keeps (no seek
     /// and no trimming at 0).
-    fn threshold(&self, seek_us: u64) -> i64 {
+    pub(crate) fn threshold(&self, seek_us: u64) -> i64 {
         if seek_us == 0 {
             i64::MIN
         } else {
@@ -626,8 +638,11 @@ impl Session {
                 "rawvideo",
                 "-",
             ]);
-        cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
         let mut child = cmd
+            .into_command()
+            .map_err(|e| e.to_string())?
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
             .spawn()
             .map_err(|e| format!("could not start ffmpeg: {e}"))?;
         let (Some(stdout), Some(stderr)) = (child.stdout.take(), child.stderr.take()) else {

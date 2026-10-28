@@ -17,18 +17,22 @@ use std::time::{Duration, Instant};
 use image::RgbImage;
 use rand::SeedableRng;
 use rand::rngs::StdRng;
+#[cfg(not(target_os = "android"))]
 use slint::winit_030::{EventResult, WinitWindowAccessor, winit};
 use slint::{
     ComponentHandle, Image, ModelRc, Rgb8Pixel, SharedPixelBuffer, Timer, TimerMode, VecModel,
 };
 
-use framecover_core::imaging::{IMAGE_EXTENSIONS, ImageFit};
+#[cfg(not(target_os = "android"))]
+use framecover_core::imaging::IMAGE_EXTENSIONS;
+use framecover_core::imaging::ImageFit;
 
 use crate::controller::{
     CONFLICT_TITLE, CONVERT_TEXT, CONVERT_TITLE, CONVERTING_TITLE, ConflictChoice, Controller,
-    Dialog, Dot, Effect, Event, OVERWRITE_TEXT, OVERWRITE_TITLE, OverwriteChoice, VIDEO_EXTENSIONS,
-    is_image_path,
+    Dialog, Dot, Effect, Event, OVERWRITE_TEXT, OVERWRITE_TITLE, OverwriteChoice,
 };
+#[cfg(not(target_os = "android"))]
+use crate::controller::{VIDEO_EXTENSIONS, is_image_path};
 use crate::error_report::{
     ErrorReport, build_google_search_url, build_issue_url, format_panic_report,
 };
@@ -36,17 +40,22 @@ use crate::filmstrip::{FilmJob, Filmstrip, TARGET_TILE_WIDTH, TILE_HEIGHT};
 use crate::frame_worker::FrameWorker;
 use crate::services::Services;
 use crate::settings::Settings;
+#[cfg(not(target_os = "android"))]
 use crate::window_fit;
 use crate::workers::{self, LoadOutcome, panic_message, spawn_guarded};
 use crate::{AppWindow, DialogData, DialogKind, FilmTile};
 
 pub const AUTHOR_NAME: &str = "Fedor Gagarin";
 pub const PROJECT_URL: &str = "https://fgagarin.github.io/framecover/";
+#[cfg(target_os = "android")]
+const MOBILE_DROP_TITLE: &str = "Tap to choose a video";
 
 /// Filmstrip jobs wait until preview frame requests have paused this long…
 const FILM_YIELD_QUIET: Duration = Duration::from_millis(150);
 /// …but no longer than this, so a long scrub cannot stall the filmstrip.
 const FILM_YIELD_MAX: Duration = Duration::from_secs(2);
+/// Playback moves the timeline this often (frames still decoding are skipped).
+const PLAYBACK_TICK: Duration = Duration::from_millis(20);
 
 /// Messages delivered to the UI thread.
 enum Msg {
@@ -84,23 +93,53 @@ struct App {
     settings: RefCell<Settings>,
     filmstrip: RefCell<Filmstrip<Image>>,
     progress_timer: Timer,
+    /// Ticks the controller while the play button is on.
+    playback_timer: Timer,
+    /// Zero of the clock passed with playback ticks.
+    started: Instant,
     frame_cache: RefCell<Option<Arc<RgbImage>>>,
     thumb_cache: RefCell<Option<Arc<RgbImage>>>,
     /// `(stack depth, kind)` of the dialog rendered last.
     last_dialog: Cell<(usize, DialogKind)>,
+    #[cfg(not(target_os = "android"))]
     drop_taken: Cell<bool>,
 }
 
 /// Install the panic hook, build the window and run the event loop.
+#[cfg(not(target_os = "android"))]
 pub fn run() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
     install_panic_hook();
     crate::services::set_app_user_model_id();
     crate::embedded::install();
 
+    let app = start();
+    // `framecover video [image]`: an image after the video becomes its
+    // thumbnail source once the video is open.
+    let mut args = std::env::args_os().skip(1).map(PathBuf::from);
+    if let Some(path) = args.next() {
+        app.dispatch(Event::OpenPath(path));
+    }
+    if let Some(image) = args.next().filter(|p| is_image_path(p)) {
+        app.dispatch(Event::OpenPath(image));
+    }
+    run_event_loop(&app);
+}
+
+/// [`run`] for Android, after `android_main` has set up Slint and logging.
+#[cfg(target_os = "android")]
+pub(crate) fn run_mobile() {
+    install_panic_hook();
+    let app = start();
+    run_event_loop(&app);
+}
+
+/// Build the window and the [`App`] around it, ready for its event loop.
+fn start() -> Rc<App> {
     let services = Services::production();
     let settings = Settings::load();
     let window = AppWindow::new().expect("could not create the main window");
+    window.set_mobile(cfg!(target_os = "android"));
     let controller = Controller::new(
         Arc::clone(&services.writer),
         settings.last_open_directory(),
@@ -115,9 +154,12 @@ pub fn run() {
         settings: RefCell::new(settings),
         filmstrip: RefCell::new(Filmstrip::default()),
         progress_timer: Timer::default(),
+        playback_timer: Timer::default(),
+        started: Instant::now(),
         frame_cache: RefCell::new(None),
         thumb_cache: RefCell::new(None),
         last_dialog: Cell::new((0, DialogKind::None)),
+        #[cfg(not(target_os = "android"))]
         drop_taken: Cell::new(false),
     });
     APP.with(|a| *a.borrow_mut() = Some(Rc::clone(&app)));
@@ -125,16 +167,10 @@ pub fn run() {
     app.bind();
     app.render();
     app.dispatch(Event::Startup);
-    // `framecover video [image]`: an image after the video becomes its
-    // thumbnail source once the video is open.
-    let mut args = std::env::args_os().skip(1).map(PathBuf::from);
-    if let Some(path) = args.next() {
-        app.dispatch(Event::OpenPath(path));
-    }
-    if let Some(image) = args.next().filter(|p| is_image_path(p)) {
-        app.dispatch(Event::OpenPath(image));
-    }
+    app
+}
 
+fn run_event_loop(app: &Rc<App>) {
     if let Err(err) = app.window.run() {
         log::error!("event loop failed: {err}");
     }
@@ -176,6 +212,7 @@ fn to_pixel_buffer(img: &RgbImage) -> SharedPixelBuffer<Rgb8Pixel> {
     SharedPixelBuffer::clone_from_slice(img.as_raw(), img.width(), img.height())
 }
 
+#[cfg(not(target_os = "android"))]
 /// Physical rectangle where the window may be placed: the work area (without
 /// the taskbar) of the monitor under the window's centre on Windows, the
 /// whole current monitor elsewhere.
@@ -205,6 +242,16 @@ fn screen_work_area(
             bottom: origin.y.saturating_add(extent.height as i32),
         })
     }
+}
+
+/// The open video as the path bar shows it. On Android the path is the
+/// app's private copy of the picked file, so only its name means anything.
+fn display_path(path: &std::path::Path) -> String {
+    #[cfg(target_os = "android")]
+    if let Some(name) = path.file_name() {
+        return name.to_string_lossy().into_owned();
+    }
+    path.display().to_string()
 }
 
 fn to_image(img: &RgbImage) -> Image {
@@ -261,6 +308,7 @@ impl App {
             for effect in effects {
                 self.execute(effect);
             }
+            self.sync_playback_timer();
         });
         if let Err(details) = outcome {
             post(Event::UnhandledError(report_from_details(details)));
@@ -296,6 +344,8 @@ impl App {
             .dispatch(Event::ShowReencodeReason));
         on!(on_step_frame, |app, direction| app
             .dispatch(Event::StepFrame(direction)));
+        on!(on_toggle_playback, |app| app
+            .dispatch(Event::TogglePlayback));
         on!(on_show_shortcuts, |app| app.dispatch(Event::ShowShortcuts));
         on!(on_show_about, |app| app.dispatch(Event::ShowAbout));
         on!(on_update_clicked, |app| app
@@ -354,9 +404,11 @@ impl App {
             _ => slint::CloseRequestResponse::HideWindow,
         });
 
+        #[cfg(not(target_os = "android"))]
         self.bind_file_drops();
     }
 
+    #[cfg(not(target_os = "android"))]
     /// OS file drag-and-drop. Slint 1.18's `DropArea` only receives drags
     /// started inside Slint, so external file drops are taken from the
     /// underlying winit window events (supported on Windows, macOS and X11;
@@ -552,12 +604,17 @@ impl App {
                 }
             }
             Effect::RevealInFolder(path) => self.services.desktop.reveal_in_file_manager(&path),
+            // A phone screen has one full-screen window.
+            #[cfg(target_os = "android")]
+            Effect::ResizeWindow(..) => {}
+            #[cfg(not(target_os = "android"))]
             Effect::ResizeWindow(width, height) => self.grow_window(width, height),
         }
     }
 
     /// Resize the window to `width`x`height` logical pixels, shrinking and
     /// moving it as needed so it stays inside its monitor's work area.
+    #[cfg(not(target_os = "android"))]
     fn grow_window(&self, width: f32, height: f32) {
         let window = self.window.window();
         if window.is_maximized() || window.is_fullscreen() {
@@ -598,6 +655,7 @@ impl App {
         }
     }
 
+    #[cfg(not(target_os = "android"))]
     fn pick_video_file(self: &Rc<Self>, start_dir: PathBuf) {
         let dialog = rfd::AsyncFileDialog::new()
             .set_title("Open video")
@@ -617,6 +675,7 @@ impl App {
         }
     }
 
+    #[cfg(not(target_os = "android"))]
     fn pick_image_file(self: &Rc<Self>, start_dir: PathBuf) {
         let dialog = rfd::AsyncFileDialog::new()
             .set_title("Use image as thumbnail")
@@ -636,6 +695,7 @@ impl App {
         }
     }
 
+    #[cfg(not(target_os = "android"))]
     fn pick_convert_destination(self: &Rc<Self>, source: PathBuf, suggested: PathBuf) {
         let mut dialog = rfd::AsyncFileDialog::new()
             .set_title("Save converted MP4")
@@ -660,6 +720,28 @@ impl App {
         if let Err(err) = spawned {
             log::error!("could not show the save dialog: {err}");
         }
+    }
+
+    /// The system document picker; the chosen file arrives as a copy in the
+    /// app's cache (see `android.rs`) and opens like any other path.
+    #[cfg(target_os = "android")]
+    fn pick_video_file(self: &Rc<Self>, _start_dir: PathBuf) {
+        crate::android::pick_file("video/*", |path| post(Event::OpenPath(path)));
+    }
+
+    #[cfg(target_os = "android")]
+    fn pick_image_file(self: &Rc<Self>, _start_dir: PathBuf) {
+        crate::android::pick_file("image/*", |path| post(Event::OpenImage(path)));
+    }
+
+    /// The converted MP4 goes next to the cached source, under the
+    /// suggested name; there is no folder to choose.
+    #[cfg(target_os = "android")]
+    fn pick_convert_destination(self: &Rc<Self>, source: PathBuf, suggested: PathBuf) {
+        post(Event::ConvertDestinationChosen {
+            source,
+            destination: Some(suggested),
+        });
     }
 
     fn run_film_jobs(&self, jobs: Vec<FilmJob>) {
@@ -692,6 +774,25 @@ impl App {
                 },
             );
         }
+    }
+
+    fn sync_playback_timer(self: &Rc<Self>) {
+        let playing = self.controller.borrow().state.playing();
+        if playing == self.playback_timer.running() {
+            return;
+        }
+        if !playing {
+            self.playback_timer.stop();
+            return;
+        }
+        let weak = Rc::downgrade(self);
+        self.playback_timer
+            .start(TimerMode::Repeated, PLAYBACK_TICK, move || {
+                if let Some(app) = weak.upgrade() {
+                    let now_ms = app.started.elapsed().as_millis() as u64;
+                    app.dispatch(Event::PlaybackTick { now_ms });
+                }
+            });
     }
 
     fn start_progress_timer(self: &Rc<Self>) {
@@ -754,6 +855,13 @@ impl App {
 
         w.set_editor_visible(s.editor_visible());
         let (title, hint) = s.drop_zone_text();
+        // Phones have no drag-and-drop: only the tap opens a file.
+        #[cfg(target_os = "android")]
+        let (title, hint) = if title == crate::controller::DROP_TITLE {
+            (MOBILE_DROP_TITLE.to_owned(), String::new())
+        } else {
+            (title, hint)
+        };
         w.set_drop_title(title.into());
         w.set_drop_hint(hint.into());
         w.set_drops_accepted(s.drops_accepted());
@@ -768,7 +876,7 @@ impl App {
         w.set_video_path(
             s.video
                 .as_ref()
-                .map(|v| v.path.display().to_string())
+                .map(|v| display_path(&v.path))
                 .unwrap_or_default()
                 .into(),
         );
@@ -795,7 +903,16 @@ impl App {
         w.set_timeline_enabled(s.timeline_enabled());
         w.set_timeline_has_duration(s.timeline.duration_ms() > 0);
         w.set_timeline_fill(s.timeline.fill_ratio());
-        w.set_timeline_label(s.timeline.label().into());
+        w.set_timeline_label(
+            if w.get_mobile() {
+                s.frame_timeline_label()
+            } else {
+                s.timeline.label()
+            }
+            .into(),
+        );
+        w.set_playing(s.playing());
+        w.set_play_enabled(s.play_enabled());
 
         let data = dialog_data(s.top_dialog());
         let identity = (s.dialogs.len(), data.kind);

@@ -46,7 +46,11 @@ pub struct Settings {
 
 impl Settings {
     /// Default location: `<config dir>/FrameCover/settings.json`.
+    /// On Android: `settings.json` in the app's private files directory.
     pub fn default_path() -> Option<PathBuf> {
+        #[cfg(target_os = "android")]
+        return crate::android::data_dir().map(|dir| dir.join("settings.json"));
+        #[cfg(not(target_os = "android"))]
         dirs::config_dir().map(|dir| dir.join("FrameCover").join("settings.json"))
     }
 
