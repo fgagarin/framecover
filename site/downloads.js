@@ -14,9 +14,10 @@ async function loadDownloads() {
     }
     if (!response.ok) throw new Error("Release unavailable");
     const release = await response.json();
-    const extensions = { windows: "exe", macos: "tar.gz", linux: "tar.gz" };
+    const extensions = { windows: "exe", macos: "tar.gz", linux: "tar.gz", android: "apk" };
+    const links = document.querySelectorAll("[data-platform]");
     let resolved = 0;
-    for (const link of document.querySelectorAll("[data-platform]")) {
+    for (const link of links) {
       const platform = link.dataset.platform;
       const suffix = `-${platform}.${extensions[platform]}`;
       // Releases published before the FrameCover rename use the old prefix.
@@ -34,7 +35,7 @@ async function loadDownloads() {
       link.href = url.href;
       resolved += 1;
     }
-    status.textContent = resolved === 3
+    status.textContent = resolved === links.length
       ? `Latest stable release: ${release.tag_name}. The buttons download the build for your chosen OS.`
       : "Some builds are not available yet. Their buttons will open the latest release page.";
   } catch {
