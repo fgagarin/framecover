@@ -31,11 +31,24 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
 
+    // Release key from the environment (the release workflow sets it from
+    // repository secrets); without one, release builds use the debug key.
+    def keystore = System.getenv('ANDROID_KEYSTORE')
+    signingConfigs {
+        if (keystore) {
+            release {
+                storeFile file(keystore)
+                storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('ANDROID_KEY_ALIAS')
+                keyPassword System.getenv('ANDROID_KEY_PASSWORD')
+            }
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
-            // Not signed for distribution yet: installable test builds only.
-            signingConfig signingConfigs.debug
+            signingConfig keystore ? signingConfigs.release : signingConfigs.debug
         }
     }
 }

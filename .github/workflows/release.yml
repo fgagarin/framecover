@@ -94,9 +94,54 @@ jobs:
           path: release-assets/*
           if-no-files-found: error
 
+  # FFmpeg linked in-process, built from source like everything else here
+  # (no cache). Signed with the release key from repository secrets
+  # (ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS,
+  # ANDROID_KEY_PASSWORD); without them, with a throwaway debug key.
+  android:
+    name: Build (android)
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build the Android build image
+        run: docker build -t framecover-android scripts/android
+      - name: Build FFmpeg libraries
+        run: >
+          docker run --rm -v "$PWD:/src" framecover-android
+          scripts/android/build-ffmpeg.sh android-x86_64 android-arm64-v8a
+      - name: Build the APK
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          signing=()
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            signing=(-v "$RUNNER_TEMP/release.jks:/keystore/release.jks:ro"
+              -e ANDROID_KEYSTORE=/keystore/release.jks
+              -e ANDROID_KEYSTORE_PASSWORD -e ANDROID_KEY_ALIAS -e ANDROID_KEY_PASSWORD)
+          else
+            echo "::warning::ANDROID_KEYSTORE_BASE64 is not set; the APK is signed with a debug key and will not update earlier installs."
+          fi
+          docker run --rm -v "$PWD:/src" "${signing[@]}" framecover-android cargo xtask android
+          rm -f "$RUNNER_TEMP/release.jks"
+      - name: Verify the APK signature
+        run: >
+          docker run --rm -v "$PWD:/src" framecover-android bash -c
+          'for apk in release-assets/*.apk; do /opt/android-sdk/build-tools/35.0.0/apksigner verify --print-certs "$apk"; done'
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-android
+          path: release-assets/*.apk
+          if-no-files-found: error
+
   publish:
     name: Publish GitHub Release
-    needs: [prepare, build]
+    needs: [prepare, build, android]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -116,4 +161,5 @@ jobs:
             --verify-tag \
             --title "FrameCover $RELEASE_TAG" \
             --notes-file release-assets/release-notes.md \
-            release-assets/*.tar.gz release-assets/*.exe release-assets/*.zip release-assets/CHANGELOG.md
+            release-assets/*.tar.gz release-assets/*.exe release-assets/*.zip release-assets/*.apk \
+            release-assets/CHANGELOG.md

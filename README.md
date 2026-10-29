@@ -28,7 +28,7 @@ interface. Video work is done by a bundled [FFmpeg](https://ffmpeg.org).
 
 ## Download
 
-Get the latest build for Windows, macOS or Linux from the
+Get the latest build for Windows, macOS, Linux or Android from the
 [releases page](https://github.com/fgagarin/framecover/releases/latest) or the
 [project site](https://fgagarin.github.io/framecover/). Nothing else needs to be
 installed: FFmpeg is included.
@@ -42,6 +42,9 @@ installed: FFmpeg is included.
   Only approve a download you trust from the official project releases.
 - **Linux:** a `.tar.gz` with the `framecover` binary next to `ffmpeg` and
   `ffprobe`.
+- **Android** (10 or later): `framecover-<version>-android.apk`
+  for arm64 and x86_64, with FFmpeg linked into the app. Install it after
+  allowing installs from your browser or file manager.
 
 ---
 
@@ -276,10 +279,18 @@ git push --atomic origin HEAD refs/tags/v0.2.0
 
 Pushing a `vX.Y.Z` tag triggers the release workflow. It validates the tag against
 the workspace and lockfile versions, generates the changelog and notes for that
-version, then builds natively on Linux, macOS and Windows. After **all three
-builds succeed**, it publishes a GitHub Release containing the three assets above
-and the full `CHANGELOG.md`, with the current version's changes in the release
-body. Asset names stay `framecover-<version>-<platform>.<ext>`: the website and
+version, then builds natively on Linux, macOS and Windows, and builds the
+Android APK (FFmpeg from source, in the `scripts/android` Docker image). After
+**all four builds succeed**, it publishes a GitHub Release containing the assets
+above and the full `CHANGELOG.md`, with the current version's changes in the
+release body.
+
+The APK is signed with the key in the repository secrets
+`ANDROID_KEYSTORE_BASE64` (the `.jks` file, base64-encoded),
+`ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`.
+Without them the workflow warns and signs with a throwaway debug key, and
+such an APK cannot update an earlier install. Keep the release key: Android
+only accepts updates signed with the same key. Asset names stay `framecover-<version>-<platform>.<ext>`: the website and
 the in-app update check rely on them.
 
 ---
