@@ -88,3 +88,7 @@ Thumbs.db
 # Android (Gradle state; android/build/ and app/build/ match build/ above)
 /android/.gradle/
 /android/local.properties
+
+# Android signing keys
+*.jks
+*.keystore
