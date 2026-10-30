@@ -44,6 +44,7 @@ pub struct VideoFile {
     pub format: VideoFormat,
     /// Total duration in milliseconds.
     pub duration_ms: u64,
+    /// Display size: the coded size turned by the stream's rotation.
     pub width: u32,
     pub height: u32,
     /// Currently embedded cover-art image, if any.

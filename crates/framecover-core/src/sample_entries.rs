@@ -27,8 +27,12 @@
 //! Only files whose `moov` box comes after the media data are handled (what
 //! ffmpeg writes without `+faststart`): the `moov` box is rebuilt in place and
 //! no chunk offset into `mdat` moves.
+//!
+//! The same box walking reads and restores the `tkhd` transformation matrix
+//! (display rotation), which no ffmpeg run of the writer carries over.
 
 use std::io::{Read, Seek, SeekFrom, Write};
+use std::ops::Range;
 use std::path::Path;
 
 use crate::error::{Error, Result};
@@ -172,12 +176,22 @@ fn stsd_entries(stsd: &[u8]) -> Result<Vec<&[u8]>> {
         .collect())
 }
 
-/// Locate the `moov` box of a file: `(offset, size)`. Fails unless every box
-/// after it is free space or metadata, i.e. no media data follows.
-fn locate_moov(file: &mut std::fs::File) -> Result<(u64, u64)> {
+/// A box at the top level of a file.
+#[derive(Debug, Clone, Copy)]
+struct TopBox {
+    kind: [u8; 4],
+    offset: u64,
+    size: u64,
+    /// File offset and width (4 or 8 bytes) of its size field; `None` for a
+    /// box running to the end of the file (size 0).
+    size_field: Option<(u64, usize)>,
+}
+
+/// The top-level boxes of a file.
+fn top_level_boxes(file: &mut std::fs::File) -> Result<Vec<TopBox>> {
     let len = file.metadata()?.len();
+    let mut out = Vec::new();
     let mut at = 0u64;
-    let mut moov = None;
     while at + 8 <= len {
         file.seek(SeekFrom::Start(at))?;
         let mut header = [0u8; 16];
@@ -186,24 +200,41 @@ fn locate_moov(file: &mut std::fs::File) -> Result<(u64, u64)> {
             break;
         }
         let size32 = u32::from_be_bytes(header[..4].try_into().expect("4 bytes")) as u64;
-        let kind: [u8; 4] = header[4..8].try_into().expect("4 bytes");
-        let size = match size32 {
-            0 => len - at,
-            1 if n >= 16 => u64::from_be_bytes(header[8..16].try_into().expect("8 bytes")),
+        let (size, size_field) = match size32 {
+            0 => (len - at, None),
+            1 if n >= 16 => (
+                u64::from_be_bytes(header[8..16].try_into().expect("8 bytes")),
+                Some((at + 8, 8)),
+            ),
             1 => return Err(err("truncated box header")),
-            n => n,
+            n => (n, Some((at, 4))),
         };
         if size < 8 || at + size > len {
             return Err(err("top-level box overruns the file"));
         }
-        match &kind {
-            b"moov" => moov = Some((at, size)),
+        out.push(TopBox {
+            kind: header[4..8].try_into().expect("4 bytes"),
+            offset: at,
+            size,
+            size_field,
+        });
+        at += size;
+    }
+    Ok(out)
+}
+
+/// Locate the `moov` box of a file: `(offset, size)`. Fails unless every box
+/// after it is free space or metadata, i.e. no media data follows.
+fn locate_moov(file: &mut std::fs::File) -> Result<(u64, u64)> {
+    let mut moov = None;
+    for b in top_level_boxes(file)? {
+        match &b.kind {
+            b"moov" => moov = Some((b.offset, b.size)),
             b"mdat" | b"moof" if moov.is_some() => {
                 return Err(err("media data follows the moov box"));
             }
             _ => {}
         }
-        at += size;
     }
     moov.ok_or_else(|| err("no moov box"))
 }
@@ -220,46 +251,351 @@ fn read_moov(path: &Path) -> Result<(std::fs::File, u64, Vec<u8>)> {
     Ok((file, offset, moov))
 }
 
-/// The first sample entry (e.g. the whole `hvc1` box) of track `track_id`.
-pub(crate) fn first_sample_entry(path: &Path, track_id: u32) -> Result<Vec<u8>> {
-    let mut file = std::fs::File::open(path)?;
-    let len = file.metadata()?.len();
-    // Unlike the rewrite, reading works wherever the moov box sits.
-    let mut at = 0u64;
-    while at + 8 <= len {
-        file.seek(SeekFrom::Start(at))?;
-        let mut header = [0u8; 16];
-        let n = file.read(&mut header)?;
-        let size32 = u32::from_be_bytes(header[..4].try_into().expect("4 bytes")) as u64;
-        let size = match size32 {
-            0 => len - at,
-            1 if n >= 16 => u64::from_be_bytes(header[8..16].try_into().expect("8 bytes")),
-            1 => return Err(err("truncated box header")),
-            n => n,
-        };
-        if size < 8 || at + size > len {
-            return Err(err("top-level box overruns the file"));
-        }
-        if &header[4..8] == b"moov" {
-            let mut moov = vec![0u8; size as usize];
-            file.seek(SeekFrom::Start(at))?;
-            file.read_exact(&mut moov)?;
-            let header = children(&moov)?[0].header;
-            let moov = &moov[header..];
-            let trak = trak_with_id(moov, track_id)?;
-            let stbl = stbl_of(trak.payload(moov))?;
-            let stsd = require(stbl, b"stsd")?.payload(stbl);
-            return stsd_entries(stsd)?
-                .first()
-                .map(|e| e.to_vec())
-                .ok_or_else(|| err("empty stsd"));
-        }
-        at += size;
-    }
-    Err(err("no moov box"))
+/// The `moov` box wherever it sits in the file, and its offset.
+fn read_moov_anywhere(file: &mut std::fs::File) -> Result<(u64, Vec<u8>)> {
+    let moov = top_level_boxes(file)?
+        .into_iter()
+        .find(|b| &b.kind == b"moov")
+        .ok_or_else(|| err("no moov box"))?;
+    let mut data = vec![0u8; moov.size as usize];
+    file.seek(SeekFrom::Start(moov.offset))?;
+    file.read_exact(&mut data)?;
+    Ok((moov.offset, data))
 }
 
-/// Per-chunk `(samples, sample description index)`, expanded from `stsc`.
+/// The first sample entry (e.g. the whole `hvc1` box) of track `track_id`.
+pub(crate) fn first_sample_entry(path: &Path, track_id: u32) -> Result<Vec<u8>> {
+    // Unlike the rewrite, reading works wherever the moov box sits.
+    let (_, moov) = read_moov_anywhere(&mut std::fs::File::open(path)?)?;
+    let header = children(&moov)?[0].header;
+    let moov = &moov[header..];
+    let trak = trak_with_id(moov, track_id)?;
+    let stbl = stbl_of(trak.payload(moov))?;
+    let stsd = require(stbl, b"stsd")?.payload(stbl);
+    stsd_entries(stsd)?
+        .first()
+        .map(|e| e.to_vec())
+        .ok_or_else(|| err("empty stsd"))
+}
+
+/// Size of the `tkhd` transformation matrix (nine 32-bit fixed-point values).
+pub(crate) const MATRIX_LEN: usize = 36;
+
+/// The unrotated matrix: `{1, 0, 0, 0, 1, 0, 0, 0, 1}` in 16.16 / 2.30.
+pub(crate) const IDENTITY_MATRIX: [u8; MATRIX_LEN] = [
+    0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //
+    0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, //
+    0, 0, 0, 0, 0, 0, 0, 0, 0x40, 0, 0, 0,
+];
+
+/// File offset of the `tkhd` matrix of track `track_id`.
+fn matrix_offset(file: &mut std::fs::File, track_id: u32) -> Result<u64> {
+    let (offset, moov_box) = read_moov_anywhere(file)?;
+    let header = children(&moov_box)?[0].header;
+    let moov = &moov_box[header..];
+    let trak = trak_with_id(moov, track_id)?;
+    let trak_payload = trak.payload(moov);
+    let tkhd = require(trak_payload, b"tkhd")?;
+    // After version/flags, times, track ID, duration, layer, group and volume.
+    let at = if tkhd.payload(trak_payload).first() == Some(&1) {
+        52
+    } else {
+        40
+    };
+    if tkhd.end - tkhd.start - tkhd.header < at + MATRIX_LEN {
+        return Err(err("truncated tkhd"));
+    }
+    Ok(offset + (header + trak.start + trak.header + tkhd.start + tkhd.header + at) as u64)
+}
+
+/// The `tkhd` transformation matrix of track `track_id`: the display
+/// rotation (and flips) players apply to the decoded frames.
+pub(crate) fn track_matrix(path: &Path, track_id: u32) -> Result<[u8; MATRIX_LEN]> {
+    let mut file = std::fs::File::open(path)?;
+    let at = matrix_offset(&mut file, track_id)?;
+    let mut matrix = [0u8; MATRIX_LEN];
+    file.seek(SeekFrom::Start(at))?;
+    file.read_exact(&mut matrix)?;
+    Ok(matrix)
+}
+
+/// Overwrite the `tkhd` matrix of track `track_id` in place (nothing moves).
+pub(crate) fn set_track_matrix(
+    path: &Path,
+    track_id: u32,
+    matrix: &[u8; MATRIX_LEN],
+) -> Result<()> {
+    let mut file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(path)?;
+    let at = matrix_offset(&mut file, track_id)?;
+    file.seek(SeekFrom::Start(at))?;
+    file.write_all(matrix)?;
+    file.sync_all()?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Thumbnail sample
+// ---------------------------------------------------------------------------
+
+/// How many sync samples Android's MP4 extractor compares when it picks the
+/// frame of a video thumbnail (`SampleTable::findThumbnailSample`): the
+/// largest one wins (the first of equal ones). Gallery apps use that frame;
+/// only the system media thumbnails prefer the cover art.
+pub(crate) const THUMBNAIL_SYNC_SAMPLES: usize = 20;
+
+/// Payload range (absolute in `data`) of the child `kind` of the payload
+/// range `within`.
+fn child_range(data: &[u8], within: &Range<usize>, kind: &[u8; 4]) -> Result<Option<Range<usize>>> {
+    Ok(find(&data[within.clone()], kind)?
+        .map(|b| within.start + b.start + b.header..within.start + b.end))
+}
+
+fn require_range(data: &[u8], within: &Range<usize>, kind: &[u8; 4]) -> Result<Range<usize>> {
+    child_range(data, within, kind)?
+        .ok_or_else(|| err(format!("no '{}' box", String::from_utf8_lossy(kind))))
+}
+
+/// `(track_ID, stbl payload range)` of every track of the `moov` box `moov`.
+fn track_tables(moov: &[u8]) -> Result<Vec<(u32, Range<usize>)>> {
+    let header = children(moov)?[0].header;
+    let mut out = Vec::new();
+    for b in children(&moov[header..])? {
+        if &b.kind != b"trak" {
+            continue;
+        }
+        let trak = header + b.start + b.header..header + b.end;
+        let id = track_id(&moov[require_range(moov, &trak, b"tkhd")?])?;
+        let mdia = require_range(moov, &trak, b"mdia")?;
+        let minf = require_range(moov, &mdia, b"minf")?;
+        out.push((id, require_range(moov, &minf, b"stbl")?));
+    }
+    Ok(out)
+}
+
+fn stbl_range(moov: &[u8], id: u32) -> Result<Range<usize>> {
+    track_tables(moov)?
+        .into_iter()
+        .find(|(track, _)| *track == id)
+        .map(|(_, stbl)| stbl)
+        .ok_or_else(|| err(format!("no track with ID {id}")))
+}
+
+/// Sample sizes from an `stsz` payload; `None` for a constant size.
+fn sample_sizes(stsz: &[u8]) -> Result<Option<Vec<u64>>> {
+    if be32(stsz, 4)? != 0 {
+        return Ok(None);
+    }
+    let n = be32(stsz, 8)? as usize;
+    (0..n)
+        .map(|i| be32(stsz, 12 + 4 * i).map(u64::from))
+        .collect::<Result<_>>()
+        .map(Some)
+}
+
+/// Sizes of the first `count` sync samples of track `track_id` (every
+/// sample is a sync sample when the track has no `stss`).
+pub(crate) fn sync_sample_sizes(path: &Path, track_id: u32, count: usize) -> Result<Vec<u64>> {
+    let mut file = std::fs::File::open(path)?;
+    let (_, moov) = read_moov_anywhere(&mut file)?;
+    let stbl = stbl_range(&moov, track_id)?;
+    let stsz = require_range(&moov, &stbl, b"stsz")?;
+    let sizes = sample_sizes(&moov[stsz])?.ok_or_else(|| err("constant sample size"))?;
+    let Some(stss) = child_range(&moov, &stbl, b"stss")? else {
+        return Ok(sizes.into_iter().take(count).collect());
+    };
+    let stss = &moov[stss];
+    (0..(be32(stss, 4)? as usize).min(count))
+        .map(|i| {
+            let sample = be32(stss, 8 + 4 * i)? as usize;
+            sizes
+                .get(sample.wrapping_sub(1))
+                .copied()
+                .ok_or_else(|| err("sync sample out of range"))
+        })
+        .collect()
+}
+
+/// Filler NAL unit header and NAL length size for the codec of sample entry
+/// `entry` (H.264 and HEVC; `None` for other codecs).
+fn filler_config(entry: &[u8]) -> Option<(&'static [u8], usize)> {
+    // Configuration boxes follow the 78-byte visual sample entry fields.
+    const FIELDS: usize = 8 + 78;
+    let boxes = entry.get(FIELDS..)?;
+    let config = |kind: &[u8; 4]| {
+        children(boxes)
+            .ok()?
+            .into_iter()
+            .find(|b| &b.kind == kind)
+            .map(|b| b.payload(boxes))
+    };
+    match entry.get(4..8)? {
+        b"avc1" | b"avc3" => Some((&[0x0c], (*config(b"avcC")?.get(4)? & 3) as usize + 1)),
+        // FD_NUT (type 38), layer 0, temporal ID 0.
+        b"hvc1" | b"hev1" => Some((&[0x4c, 0x01], (*config(b"hvcC")?.get(21)? & 3) as usize + 1)),
+        _ => None,
+    }
+}
+
+/// Grow the first sample of track `track_id` (an H.264 or HEVC frame) to at
+/// least `min_size` bytes with a filler NAL unit, so Android picks it for the
+/// video's thumbnail. The bytes are inserted in the file after the sample;
+/// the chunk offsets behind it and the size of the enclosing `mdat` follow.
+/// Returns whether the sample was padded: not for other codecs, constant
+/// sample sizes, a sample already that large or a file it cannot parse.
+/// Errors come from writing, which may leave the file damaged.
+pub(crate) fn pad_first_sample(path: &Path, track_id: u32, min_size: u64) -> Result<bool> {
+    let mut file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(path)?;
+    let padding = match plan_padding(&mut file, track_id, min_size) {
+        Ok(Some(padding)) => padding,
+        Ok(None) => return Ok(false),
+        Err(e) => {
+            log::debug!("not padding the first sample of '{}': {e}", path.display());
+            return Ok(false);
+        }
+    };
+    let Padding {
+        at,
+        insert,
+        size_field,
+        moov_at,
+        moov,
+    } = padding;
+    let added = insert.len() as u64;
+    let len = file.metadata()?.len();
+
+    // Move everything behind the insertion point, last block first.
+    const BLOCK: u64 = 8 << 20;
+    file.set_len(len + added)?;
+    let mut buf = vec![0u8; BLOCK.min(len - at) as usize];
+    let mut end = len;
+    while end > at {
+        let from = end.saturating_sub(BLOCK).max(at);
+        let block = &mut buf[..(end - from) as usize];
+        file.seek(SeekFrom::Start(from))?;
+        file.read_exact(block)?;
+        file.seek(SeekFrom::Start(from + added))?;
+        file.write_all(block)?;
+        end = from;
+    }
+    file.seek(SeekFrom::Start(at))?;
+    file.write_all(&insert)?;
+    if let Some((pos, bytes)) = size_field {
+        file.seek(SeekFrom::Start(pos))?;
+        file.write_all(&bytes)?;
+    }
+    file.seek(SeekFrom::Start(moov_at))?;
+    file.write_all(&moov)?;
+    file.sync_all()?;
+    Ok(true)
+}
+
+/// The edit [`pad_first_sample`] makes.
+struct Padding {
+    /// File offset of the inserted bytes (the end of the first sample).
+    at: u64,
+    /// The length-prefixed filler NAL unit.
+    insert: Vec<u8>,
+    /// New size field of the enclosing `mdat`: file offset and bytes.
+    size_field: Option<(u64, Vec<u8>)>,
+    /// The updated `moov` box and its offset after the insertion.
+    moov_at: u64,
+    moov: Vec<u8>,
+}
+
+fn plan_padding(file: &mut std::fs::File, track_id: u32, min_size: u64) -> Result<Option<Padding>> {
+    let (moov_offset, mut moov) = read_moov_anywhere(file)?;
+    let stbl = stbl_range(&moov, track_id)?;
+    let stsz = require_range(&moov, &stbl, b"stsz")?;
+    // The size of the first sample: in the table, or the constant size of a
+    // one-sample track (what ffmpeg writes for the preview frame).
+    let (first, size_at) = match (be32(&moov, stsz.start + 4)?, be32(&moov, stsz.start + 8)?) {
+        (0, n) if n > 0 => (u64::from(be32(&moov, stsz.start + 12)?), stsz.start + 12),
+        (size, 1) => (u64::from(size), stsz.start + 4),
+        _ => return Ok(None),
+    };
+    let stsd = require_range(&moov, &stbl, b"stsd")?;
+    let Some((nal_header, length_size)) = stsd_entries(&moov[stsd])?
+        .first()
+        .and_then(|entry| filler_config(entry))
+    else {
+        return Ok(None);
+    };
+    let Some(&start) = chunk_offsets(&moov[stbl.clone()])?.0.first() else {
+        return Ok(None);
+    };
+    let min_added = (length_size + nal_header.len() + 1) as u64;
+    let added = min_size.saturating_sub(first).max(min_added);
+    let nal_len = added - length_size as u64;
+    if first >= min_size || (length_size < 4 && nal_len >> (8 * length_size) != 0) {
+        return Ok(None);
+    }
+    let mut insert = nal_len.to_be_bytes()[8 - length_size..].to_vec();
+    insert.extend_from_slice(nal_header);
+    insert.resize(added as usize - 1, 0xff);
+    insert.push(0x80);
+    let at = start + first;
+
+    // The sample size, and every chunk offset at or behind the insertion.
+    let grown = u32::try_from(first + added).map_err(|_| err("sample size overflow"))?;
+    moov[size_at..size_at + 4].copy_from_slice(&grown.to_be_bytes());
+    for (_, stbl) in track_tables(&moov)? {
+        let (table, wide) = match child_range(&moov, &stbl, b"stco")? {
+            Some(stco) => (stco, false),
+            None => (require_range(&moov, &stbl, b"co64")?, true),
+        };
+        for i in 0..be32(&moov, table.start + 4)? as usize {
+            if wide {
+                let pos = table.start + 8 + 8 * i;
+                let offset = be64(&moov, pos)?;
+                if offset >= at {
+                    moov[pos..pos + 8].copy_from_slice(&(offset + added).to_be_bytes());
+                }
+            } else {
+                let pos = table.start + 8 + 4 * i;
+                let offset = u64::from(be32(&moov, pos)?);
+                if offset >= at {
+                    let moved =
+                        u32::try_from(offset + added).map_err(|_| err("chunk offset overflow"))?;
+                    moov[pos..pos + 4].copy_from_slice(&moved.to_be_bytes());
+                }
+            }
+        }
+    }
+
+    // The top-level box holding the sample (`mdat`) grows: its new size
+    // field, none for a box running to the end of the file.
+    let mdat = top_level_boxes(file)?
+        .into_iter()
+        .find(|b| b.offset < at && at <= b.offset + b.size)
+        .ok_or_else(|| err("no box holds the first sample"))?;
+    let size_field = match mdat.size_field {
+        None => None,
+        Some((pos, 8)) => Some((pos, (mdat.size + added).to_be_bytes().to_vec())),
+        Some((pos, _)) => {
+            let size = u32::try_from(mdat.size + added).map_err(|_| err("mdat size overflow"))?;
+            Some((pos, size.to_be_bytes().to_vec()))
+        }
+    };
+    let moov_at = if moov_offset >= at {
+        moov_offset + added
+    } else {
+        moov_offset
+    };
+    Ok(Some(Padding {
+        at,
+        insert,
+        size_field,
+        moov_at,
+        moov,
+    }))
+}
+
 fn expand_stsc(stsc: &[u8], chunks: usize) -> Result<Vec<(u32, u32)>> {
     let count = be32(stsc, 4)? as usize;
     let mut runs = Vec::with_capacity(count);

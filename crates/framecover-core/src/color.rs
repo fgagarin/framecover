@@ -44,11 +44,20 @@ pub fn display_filter(stream: &Stream) -> Option<&'static str> {
 
 type CacheKey = (PathBuf, u64, Option<SystemTime>);
 
-/// [`display_filter`] for the first playable video stream of `path`,
-/// remembered per file (path, size and modification time) so repeated frame
-/// extractions do not probe again. Unreadable files: `None`.
-pub fn display_filter_for(path: &Path) -> Option<&'static str> {
-    static CACHE: OnceLock<Mutex<HashMap<CacheKey, Option<&'static str>>>> = OnceLock::new();
+/// How decoded frames of a file become the frames the UI shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Display {
+    /// [`display_filter`] of the first playable video stream.
+    pub filter: Option<&'static str>,
+    /// Clockwise rotation that turns the frames upright ([`Stream::rotation`]).
+    pub rotation: u32,
+}
+
+/// [`Display`] for the first playable video stream of `path`, remembered
+/// per file (path, size and modification time) so repeated frame
+/// extractions do not probe again. Unreadable files: the default.
+pub fn display_for(path: &Path) -> Display {
+    static CACHE: OnceLock<Mutex<HashMap<CacheKey, Display>>> = OnceLock::new();
     let meta = std::fs::metadata(path).ok();
     let key: CacheKey = (
         path.to_path_buf(),
@@ -59,16 +68,27 @@ pub fn display_filter_for(path: &Path) -> Option<&'static str> {
     if let Some(hit) = cache.lock().ok().and_then(|c| c.get(&key).copied()) {
         return hit;
     }
-    let filter = probe::probe(path)
+    let display = probe::probe(path)
         .ok()
-        .and_then(|info| info.first_playable_video().and_then(display_filter));
+        .and_then(|info| {
+            info.first_playable_video().map(|s| Display {
+                filter: display_filter(s),
+                rotation: s.rotation(),
+            })
+        })
+        .unwrap_or_default();
     if let Ok(mut c) = cache.lock() {
         if c.len() > 256 {
             c.clear();
         }
-        c.insert(key, filter);
+        c.insert(key, display);
     }
-    filter
+    display
+}
+
+/// The `-vf` filter of [`display_for`].
+pub fn display_filter_for(path: &Path) -> Option<&'static str> {
+    display_for(path).filter
 }
 
 /// The colour description a preview frame must carry to match its source.

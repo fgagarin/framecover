@@ -17,11 +17,11 @@ use std::process::Stdio;
 
 use image::RgbImage;
 
-use crate::color;
 use crate::error::{Error, Result};
 #[cfg(not(feature = "libav"))]
 use crate::ffmpeg::{self, Tool};
 use crate::models::VideoFile;
+use crate::{color, imaging};
 
 /// Extracts a single RGB frame nearest to a timeline position.
 pub trait FrameExtractor: Send + Sync {
@@ -52,11 +52,19 @@ impl FrameExtractor for FfmpegFrameExtractor {
             cause,
         };
 
+        // Decoded frames keep the stored orientation; the display matrix
+        // turns them upright.
+        let rotation = color::display_for(&video.path).rotation;
+        let upright = |frame: RgbImage| match rotation {
+            0 => frame,
+            degrees => imaging::rotate(&frame, degrees),
+        };
+
         let step_ms = video.frame_step_ms.max(1);
         let target_us = offset_ms * 1000;
         let seek_us = seek_point_us(video, offset_ms);
         if let Some(frame) = decode(&video.path, seek_us, Some(1)).map_err(fail)? {
-            return Ok(frame);
+            return Ok(upright(frame));
         }
 
         // Nothing at or after the seek point: the target lies past the last
@@ -65,7 +73,7 @@ impl FrameExtractor for FfmpegFrameExtractor {
         for window_ms in windows {
             let start_us = target_us.saturating_sub(window_ms * 1000);
             if let Some(frame) = decode(&video.path, start_us, None).map_err(fail)? {
-                return Ok(frame);
+                return Ok(upright(frame));
             }
             if start_us == 0 {
                 break;
@@ -87,7 +95,8 @@ pub(crate) fn seek_point_us(video: &VideoFile, offset_ms: u64) -> u64 {
 /// and return the last one read (`max_frames` limits how many are decoded).
 fn decode(path: &Path, seek_us: u64, max_frames: Option<u32>) -> Result<Option<RgbImage>, String> {
     let mut cmd = ffmpeg::command(Tool::Ffmpeg).map_err(|e| e.to_string())?;
-    // `-noautorotate`: return the stored orientation, like PyAV's `to_image`.
+    // `-noautorotate`: the stored orientation (`extract` rotates it), as
+    // the in-process decoder has no rotation filters.
     cmd.args(["-hide_banner", "-nostdin", "-v", "error", "-noautorotate"]);
     if seek_us > 0 {
         cmd.arg("-ss").arg(format_secs(seek_us));

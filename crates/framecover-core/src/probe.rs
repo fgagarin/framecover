@@ -230,6 +230,27 @@ impl Stream {
             .iter()
             .find(|d| d.get("side_data_type").and_then(|t| t.as_str()) == Some(kind))
     }
+
+    /// Clockwise rotation (0, 90, 180 or 270 degrees) that turns decoded
+    /// frames upright, from the display matrix (phones record portrait video
+    /// as landscape frames plus a rotation). ffprobe's `rotation` is
+    /// counter-clockwise, like `-display_rotation`; this is what ffmpeg's
+    /// autorotation applies. Other angles and flips are ignored.
+    pub fn rotation(&self) -> u32 {
+        let ccw = self
+            .side_data("Display Matrix")
+            .and_then(|d| d.get("rotation"))
+            .and_then(serde_json::Value::as_f64)
+            .unwrap_or(0.0);
+        let cw = (-ccw).rem_euclid(360.0);
+        let quarters = (cw / 90.0).round();
+        if (cw - quarters * 90.0).abs() < 1.0 {
+            (quarters as u32 % 4) * 90
+        } else {
+            0
+        }
+    }
+
     pub fn is_video(&self) -> bool {
         self.codec_type == "video"
     }
@@ -614,6 +635,26 @@ mod tests {
             "30000/1001"
         );
         assert_eq!(Rational::parse("25").unwrap().to_string(), "25");
+    }
+
+    #[test]
+    fn rotation_is_clockwise_from_the_display_matrix() {
+        let stream = |side_data: &str| {
+            let json = format!(
+                r#"{{"streams": [{{"index": 0, "codec_type": "video",
+                     "side_data_list": [{side_data}]}}], "format": {{}}}}"#
+            );
+            parse(json.as_bytes()).unwrap().streams[0].rotation()
+        };
+        let matrix =
+            |r: &str| format!(r#"{{"side_data_type": "Display Matrix", "rotation": {r}}}"#);
+        assert_eq!(stream(""), 0);
+        assert_eq!(stream(&matrix("-90")), 90);
+        assert_eq!(stream(&matrix("90")), 270);
+        assert_eq!(stream(&matrix("180")), 180);
+        assert_eq!(stream(&matrix("-180")), 180);
+        assert_eq!(stream(&matrix("-90.0001")), 90);
+        assert_eq!(stream(&matrix("45")), 0);
     }
 
     #[test]
