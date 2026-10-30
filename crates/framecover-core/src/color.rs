@@ -146,8 +146,14 @@ pub fn preview_filter(
         return format!("scale={width}:{height}:flags=lanczos");
     };
     if !color.is_hdr() && color.space.is_none() {
-        // Unknown matrix: nothing to match, keep swscale's default.
-        return format!("scale={width}:{height}:flags=lanczos,format={pix_fmt}");
+        // Unknown matrix: nothing to match, keep swscale's default (but not
+        // its limited range for a full-range target).
+        let range = if color.range.as_deref() == Some("pc") {
+            ":out_range=full"
+        } else {
+            ""
+        };
+        return format!("scale={width}:{height}:flags=lanczos{range},format={pix_fmt}");
     }
     let mut z = format!("zscale=w={width}:h={height}:f=lanczos");
     if color.is_hdr() {

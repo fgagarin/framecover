@@ -55,6 +55,12 @@ If you are unsure or have not tested the program on similar files, save a copy i
 
 pub const CONFLICT_TITLE: &str = "Copy already exists";
 
+pub const REENCODE_TITLE: &str = "Video re-encoding";
+pub const REENCODE_REQUEST_TEXT: &str = "Would you like videos like this one to save without \
+re-encoding? Request support: a GitHub feature request opens with the video's technical \
+details (codec, pixel format, colour, frame rate), which you can review before sending. \
+No file or file name is included.";
+
 pub const IMAGE_NEEDS_VIDEO_TITLE: &str = "Open a video first";
 pub const IMAGE_NEEDS_VIDEO_TEXT: &str = "A picture can become the thumbnail of a video \
 that is open in FrameCover.\n\n\
@@ -330,10 +336,14 @@ pub enum Dialog {
         destination: PathBuf,
         details: Option<String>,
     },
-    /// Plain message with an OK button (shortcuts, re-encode reason, …).
+    /// Plain message with an OK button (shortcuts, …).
     Info {
         title: String,
         text: String,
+    },
+    /// Why saving will re-encode the video, with a support request link.
+    Reencode {
+        reason: String,
     },
     About,
     Error {
@@ -860,12 +870,8 @@ impl Controller {
             }
             Event::ShowReencodeReason => {
                 if let Some(reason) = &self.state.reencode_reason {
-                    self.state.dialogs.push(Dialog::Info {
-                        title: "Video re-encoding".to_owned(),
-                        text: format!(
-                            "Saving this thumbnail will re-encode the video, which can take \
-longer and change its video codec.\n\nReason: {reason}"
-                        ),
+                    self.state.dialogs.push(Dialog::Reencode {
+                        reason: reason.clone(),
                     });
                 }
             }
@@ -1712,7 +1718,7 @@ mod tests {
         assert_eq!(h.s().reencode_reason.as_deref(), Some("HEVC"));
         h.send(Event::ShowReencodeReason);
         assert!(
-            matches!(h.s().top_dialog(), Some(Dialog::Info { text, .. }) if text.contains("Reason: HEVC"))
+            matches!(h.s().top_dialog(), Some(Dialog::Reencode { reason }) if reason == "HEVC")
         );
     }
 

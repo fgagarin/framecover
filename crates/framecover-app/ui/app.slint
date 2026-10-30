@@ -95,6 +95,7 @@ export component AppWindow inherits Window {
     callback conflict-answer(int);
     callback error-find-cause();
     callback error-report-problem();
+    callback request-support();
 
     /// Reset per-dialog local state; called by Rust whenever a new dialog opens.
     public function reset-dialog-state() {
@@ -263,6 +264,7 @@ export component AppWindow inherits Window {
             conflict-answer(choice) => { root.conflict-answer(choice); }
             find-cause => { root.error-find-cause(); }
             report-problem => { root.error-report-problem(); }
+            request-support => { root.request-support(); }
             open-project-page => { root.open-project-page(); }
         }
     }

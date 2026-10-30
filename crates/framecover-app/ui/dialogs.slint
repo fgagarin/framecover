@@ -7,6 +7,7 @@ import { WarningIcon } from "icons.slint";
 export enum DialogKind {
     none,
     info,
+    reencode,
     convert-offer,
     converting,
     overwrite-warning,
@@ -20,7 +21,8 @@ export struct DialogData {
     kind: DialogKind,
     title: string,
     text: string,
-    /// Error stack trace, or the conflict dialog's informative text.
+    /// Error stack trace, the conflict dialog's informative text or the
+    /// re-encode dialog's note on support requests.
     details: string,
 }
 
@@ -77,6 +79,7 @@ export component DialogLayer inherits Rectangle {
     callback conflict-answer(int);
     callback find-cause();
     callback report-problem();
+    callback request-support();
     callback open-project-page();
 
     /// Local state of the overwrite warning and error dialog.
@@ -86,7 +89,7 @@ export component DialogLayer inherits Rectangle {
 
     /// Return / Escape handling for the visible dialog.
     public function accept-default() {
-        if data.kind == DialogKind.info || data.kind == DialogKind.about || data.kind == DialogKind.error {
+        if data.kind == DialogKind.info || data.kind == DialogKind.reencode || data.kind == DialogKind.about || data.kind == DialogKind.error {
             root.dismiss();
         } else if data.kind == DialogKind.convert-offer {
             root.convert-answer(false);
@@ -97,7 +100,7 @@ export component DialogLayer inherits Rectangle {
         }
     }
     public function cancel() {
-        if data.kind == DialogKind.info || data.kind == DialogKind.about || data.kind == DialogKind.error {
+        if data.kind == DialogKind.info || data.kind == DialogKind.reencode || data.kind == DialogKind.about || data.kind == DialogKind.error {
             root.dismiss();
         } else if data.kind == DialogKind.convert-offer {
             root.convert-answer(false);
@@ -118,6 +121,30 @@ export component DialogLayer inherits Rectangle {
             info-text := Body { width: parent.width; text: data.text; }
         }
         ButtonRow {
+            Button { text: "OK"; primary: true; clicked => { root.dismiss(); } }
+        }
+    }
+
+    if data.kind == DialogKind.reencode: Card {
+        title: data.title;
+        ScrollView {
+            min-height: min(reencode-text.preferred-height, 80px);
+            preferred-height: reencode-text.preferred-height;
+            reencode-text := VerticalLayout {
+                width: parent.width;
+                spacing: 8px;
+                Body { text: data.text; }
+                Body { text: data.details; color: Theme.muted; font-size: 12px; }
+            }
+        }
+        HorizontalLayout {
+            spacing: 8px;
+            Button {
+                text: "Request support ↗";
+                clicked => { root.request-support(); }
+                Tooltip { text: @markdown("Open a feature request on GitHub with this video's technical details"); }
+            }
+            Rectangle { horizontal-stretch: 1; }
             Button { text: "OK"; primary: true; clicked => { root.dismiss(); } }
         }
     }
