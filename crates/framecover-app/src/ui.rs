@@ -30,11 +30,13 @@ use framecover_core::imaging::ImageFit;
 use crate::controller::{
     CONFLICT_TITLE, CONVERT_TEXT, CONVERT_TITLE, CONVERTING_TITLE, ConflictChoice, Controller,
     Dialog, Dot, Effect, Event, OVERWRITE_TEXT, OVERWRITE_TITLE, OverwriteChoice,
+    REENCODE_REQUEST_TEXT, REENCODE_TITLE,
 };
 #[cfg(not(target_os = "android"))]
 use crate::controller::{VIDEO_EXTENSIONS, is_image_path};
 use crate::error_report::{
-    ErrorReport, build_google_search_url, build_issue_url, format_panic_report,
+    ErrorReport, build_google_search_url, build_issue_url, build_support_request_url,
+    format_panic_report,
 };
 use crate::filmstrip::{FilmJob, Filmstrip, TARGET_TILE_WIDTH, TILE_HEIGHT};
 use crate::frame_worker::FrameWorker;
@@ -383,6 +385,7 @@ impl App {
             .open_error_link(build_google_search_url));
         on!(on_error_report_problem, |app| app
             .open_error_link(build_issue_url));
+        on!(on_request_support, |app| app.open_support_request());
         on!(on_film_clicked, |app, x| {
             let position = app.filmstrip.borrow().position_at(x);
             if let Some(ms) = position {
@@ -450,6 +453,27 @@ impl App {
             Some(Dialog::Error { report, .. }) => build(report),
             _ => return,
         };
+        self.services.desktop.open_url(&url);
+    }
+
+    /// Open a feature request for the video in the re-encode dialog, with
+    /// its technical details (read now; the dialog is open only briefly).
+    fn open_support_request(&self) {
+        let (reason, path) = {
+            let controller = self.controller.borrow();
+            let s = &controller.state;
+            match (s.top_dialog(), &s.video) {
+                (Some(Dialog::Reencode { reason }), Some(video)) => {
+                    (reason.clone(), video.path.clone())
+                }
+                _ => return,
+            }
+        };
+        let details = framecover_core::probe::probe(&path)
+            .map(|info| info.technical_summary())
+            .map_err(|err| log::warn!("support request: cannot read the video: {err}"))
+            .ok();
+        let url = build_support_request_url(&reason, details.as_deref());
         self.services.desktop.open_url(&url);
     }
 
@@ -934,6 +958,15 @@ fn dialog_data(dialog: Option<&Dialog>) -> DialogData {
         Some(Dialog::Info { title, text }) => {
             (DialogKind::Info, title.clone(), text.clone(), String::new())
         }
+        Some(Dialog::Reencode { reason }) => (
+            DialogKind::Reencode,
+            REENCODE_TITLE.into(),
+            format!(
+                "Saving this thumbnail will re-encode the video, which can take longer and \
+change its video codec.\n\nReason: {reason}"
+            ),
+            REENCODE_REQUEST_TEXT.into(),
+        ),
         Some(Dialog::ConvertOffer { .. }) => (
             DialogKind::ConvertOffer,
             CONVERT_TITLE.into(),

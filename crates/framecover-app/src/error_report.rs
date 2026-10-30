@@ -328,6 +328,41 @@ pub fn build_issue_url(report: &ErrorReport) -> String {
     )
 }
 
+/// URL for a new GitHub feature request asking for saves of this kind of
+/// video without re-encoding: the re-encode reason and the video's technical
+/// details ([`framecover_core::probe::ProbeInfo::technical_summary`]), when
+/// the file could be read.
+pub fn build_support_request_url(reason: &str, details: Option<&str>) -> String {
+    let details = details.map_or_else(
+        || "(the video could not be read)".to_owned(),
+        |d| tail(d, MAX_ISSUE_TRACE_CHARS),
+    );
+    let body = format!(
+        "### Request\n\nPlease support saving a thumbnail into this kind of video without \
+re-encoding it.\n\n\
+### Where the video comes from\n\n<!-- Camera, phone model, app or website. -->\n\n\
+### Why FrameCover re-encodes it\n\n{reason}\n\n\
+### Video details\n\n```\n{details}\n```\n\n\
+### Environment\n\n- FrameCover {version}\n- {os} ({arch})\n\n\
+<sub>No file or file name is included; the details above were read from the video.</sub>\n",
+        version = framecover_core::VERSION,
+        os = platform_name(),
+        arch = std::env::consts::ARCH,
+    );
+    let title: String = format!("Save without re-encoding: {}", reason.trim_end_matches('.'))
+        .chars()
+        .take(200)
+        .collect();
+    format!(
+        "{GITHUB_ISSUES_URL}/new?{}",
+        urlencode(&[
+            ("title", &title),
+            ("labels", "enhancement"),
+            ("body", &body)
+        ])
+    )
+}
+
 /// `application/x-www-form-urlencoded` encoding identical to Python's
 /// `urllib.parse.urlencode` (spaces become `+`).
 pub fn urlencode(pairs: &[(&str, &str)]) -> String {
@@ -488,6 +523,31 @@ mod tests {
         assert!(url.starts_with(&format!("{GITHUB_ISSUES_URL}/new?")));
         assert_eq!(param(&url, "title"), "App error: panicked: bad frame index");
         assert!(param(&url, "body").contains(&report.stack_trace));
+    }
+
+    #[test]
+    fn support_request_carries_reason_and_details() {
+        let url = build_support_request_url(
+            "pixel format is 'yuv422p', not yuv420p.",
+            Some("container: mov\nstream 0 (video): codec=h264"),
+        );
+        assert!(url.starts_with(&format!("{GITHUB_ISSUES_URL}/new?")));
+        assert_eq!(
+            param(&url, "title"),
+            "Save without re-encoding: pixel format is 'yuv422p', not yuv420p"
+        );
+        assert_eq!(param(&url, "labels"), "enhancement");
+        let body = param(&url, "body");
+        assert!(
+            body.contains("pixel format is 'yuv422p', not yuv420p."),
+            "{body}"
+        );
+        assert!(
+            body.contains("```\ncontainer: mov\nstream 0 (video): codec=h264\n```"),
+            "{body}"
+        );
+        let unread = param(&build_support_request_url("x", None), "body");
+        assert!(unread.contains("(the video could not be read)"), "{unread}");
     }
 
     #[test]

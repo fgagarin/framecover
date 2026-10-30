@@ -197,6 +197,8 @@ enum ConcatCodec {
 /// 8-bit and 10-bit 4:2:0, the pixel formats the fast path can encode.
 const PIX_FMT_8: &str = "yuv420p";
 const PIX_FMT_10: &str = "yuv420p10le";
+/// How the H.264 decoder reports full-range 8-bit 4:2:0 (phone cameras).
+const PIX_FMT_8_FULL: &str = "yuvj420p";
 
 /// A codec/profile/pixel format combination the preview encoder can match:
 /// `(codec, encoder profile, ffprobe profile in lower case, pixel format)`.
@@ -275,6 +277,12 @@ fn named_pix_fmt(stream: &Stream) -> Option<&str> {
         .pix_fmt
         .as_deref()
         .filter(|p| !p.is_empty() && *p != "unknown" && *p != "none")
+}
+
+/// [`named_pix_fmt`] with full-range `yuvj420p` read as `yuv420p`: the range
+/// belongs to the colour description, which the preview repeats.
+fn coded_pix_fmt(stream: &Stream) -> Option<&str> {
+    named_pix_fmt(stream).map(|p| if p == PIX_FMT_8_FULL { PIX_FMT_8 } else { p })
 }
 
 /// Python `repr()` of a `str`.
@@ -406,9 +414,12 @@ fn concat_decision(
     let Some((codec, profile, probe_profile, pix_fmt)) = stream_concat_format(stream) else {
         unreachable!("codec_reasons rejects other formats");
     };
-    // Anything beyond the original 8-bit SDR H.264/AV1 path reproduces the
-    // source's colour description exactly.
-    let extended = codec == ConcatCodec::Hevc || pix_fmt != PIX_FMT_8 || stream.is_hdr();
+    // Anything beyond the original 8-bit limited-range SDR H.264/AV1 path
+    // reproduces the source's colour description exactly.
+    let extended = codec == ConcatCodec::Hevc
+        || pix_fmt != PIX_FMT_8
+        || stream.is_hdr()
+        || stream.color_range() == Some("pc");
     (
         Some(ConcatParams {
             codec,
@@ -476,8 +487,8 @@ fn codec_reasons(stream: &Stream) -> Vec<String> {
             py_repr_str(raw_profile.unwrap_or("(none)"))
         ));
     }
-    let pix_fmt = named_pix_fmt(stream);
-    let shown = pix_fmt.map_or_else(|| "None".to_owned(), py_repr_str);
+    let pix_fmt = coded_pix_fmt(stream);
+    let shown = named_pix_fmt(stream).map_or_else(|| "None".to_owned(), py_repr_str);
     match pix_fmt {
         Some(PIX_FMT_8 | PIX_FMT_10) => {
             if supported_codec
@@ -522,7 +533,7 @@ fn stream_concat_format(
     concat_format(
         stream.codec_name.as_deref().unwrap_or(""),
         &named_profile(stream).unwrap_or("").to_lowercase(),
-        named_pix_fmt(stream).unwrap_or(""),
+        coded_pix_fmt(stream).unwrap_or(""),
     )
 }
 
@@ -1254,7 +1265,7 @@ fn preview_matches(preview: &ProbeInfo, params: &ConcatParams) -> (bool, String)
         .is_none_or(|t| stream.codec_tag_string.as_deref() == Some(t));
     let ok = codec_ok
         && profile == expected_profile
-        && named_pix_fmt(stream) == Some(params.pix_fmt)
+        && coded_pix_fmt(stream) == Some(params.pix_fmt)
         && stream.width == Some(params.width)
         && stream.height == Some(params.height)
         && time_base.is_some_and(|tb| tb.num == 1 && tb.den == params.video_track_timescale)
@@ -2036,6 +2047,31 @@ mod tests {
         let params = decide(&high10).0.unwrap();
         assert_eq!((params.profile, params.pix_fmt), ("high10", "yuv420p10le"));
         assert!(params.color.is_some());
+    }
+
+    #[test]
+    fn full_range_h264_is_eligible_with_its_range() {
+        // Phone cameras: the H.264 decoder reports full range as yuvj420p.
+        let full = H264
+            .replace("yuv420p", "yuvj420p")
+            .replace("\"time_base\"", "\"color_range\": \"pc\", \"time_base\"");
+        let (params, reason) = decide(&full);
+        assert_eq!(reason, None);
+        let params = params.unwrap();
+        assert_eq!((params.profile, params.pix_fmt), ("high", "yuv420p"));
+        let color = params.color.as_ref().unwrap();
+        assert_eq!(color.range.as_deref(), Some("pc"));
+        assert_eq!(
+            color::preview_filter(320, 240, params.pix_fmt, Some(color)),
+            "scale=320:240:flags=lanczos:out_range=full,format=yuv420p"
+        );
+
+        // The encoded preview is read back the same way; a limited-range one
+        // would not join.
+        assert!(preview_matches(&probe_json(&full, ""), &params).0);
+        let limited = H264.replace("\"time_base\"", "\"color_range\": \"tv\", \"time_base\"");
+        assert!(!preview_matches(&probe_json(&limited, ""), &params).0);
+        assert_eq!(remux_ineligibility_reason(&probe_json(&full, "")), None);
     }
 
     #[test]

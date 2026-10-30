@@ -364,6 +364,50 @@ fn h264_high10_takes_fast_path() {
 }
 
 #[test]
+fn full_range_h264_takes_fast_path() {
+    // Phone cameras record full-range H.264 (`yuvj420p`), with or without a
+    // matrix tag.
+    let dir = tempfile::tempdir().unwrap();
+    let untagged: &[&str] = &["-pix_fmt", "yuvj420p", "-c:v", "libx264"];
+    let bt601: &[&str] = &[
+        "-pix_fmt",
+        "yuvj420p",
+        "-c:v",
+        "libx264",
+        "-color_primaries",
+        "bt470bg",
+        "-color_trc",
+        "smpte170m",
+        "-colorspace",
+        "bt470bg",
+    ];
+    for (name, video) in [("untagged.mp4", untagged), ("bt601.mp4", bt601)] {
+        let source = fixture(&dir.path().join(name), 2, "320x240", video);
+        assert_eq!(video_stream(&source)["pix_fmt"], "yuvj420p");
+        assert_eq!(reencode_reason(&source), None, "{name}");
+        let target = copy_of(&source, &format!("target-{name}"));
+        let result = save(&target, &red(), 1000);
+        assert_eq!(result.duration_shift_ms, 40, "{name}");
+        assert_fast_path_copy(&source, &target, 2);
+        // Full-range levels: the inserted frame decodes back to the chosen
+        // colour instead of a washed-out or over-contrasted one.
+        let [r, g, b] = support::mean(&support::first_playable_frame(&target));
+        assert!(
+            (r - 240.0).abs() < 6.0 && g < 26.0 && b < 26.0,
+            "{name}: {r} {g} {b}"
+        );
+        // Saving again replaces the preview, still by stream copy.
+        assert_eq!(reencode_reason(&target), None, "{name}");
+        assert_eq!(save(&target, &red(), 1500).duration_shift_ms, 0, "{name}");
+        assert_eq!(
+            &support::video_packets(&target)[2..],
+            &support::video_packets(&source)[1..],
+            "{name}: re-save re-encoded the source"
+        );
+    }
+}
+
+#[test]
 fn av1_main_10bit_takes_fast_path() {
     if !support::has_encoder("libaom-av1") {
         eprintln!("libaom-av1 unavailable; skipping");

@@ -357,7 +357,95 @@ impl ProbeInfo {
             .iter()
             .any(|s| s.is_video() && s.is_attached_pic())
     }
+
+    /// Technical description for support requests: the container, the tags
+    /// naming the recording device or software, and every stream's coding,
+    /// timing and colour properties. Nothing personal: no file name, title,
+    /// date or location.
+    pub fn technical_summary(&self) -> String {
+        let mut lines = vec![format!("container: {}", self.format.format_name)];
+        for key in SUMMARY_TAGS {
+            if let Some((_, value)) = self
+                .format
+                .tags
+                .iter()
+                .find(|(k, _)| k.eq_ignore_ascii_case(key))
+            {
+                lines.push(format!("{key}: {value}"));
+            }
+        }
+        for s in &self.streams {
+            let size = match (s.width, s.height) {
+                (Some(w), Some(h)) => Some(format!("{w}x{h}")),
+                _ => None,
+            };
+            let side_data: Vec<String> = s
+                .side_data_list
+                .iter()
+                .filter_map(|d| {
+                    let kind = d.get("side_data_type")?.as_str()?;
+                    Some(
+                        match d.get("dv_profile").and_then(serde_json::Value::as_u64) {
+                            Some(p) => format!("{kind} (profile {p})"),
+                            None => kind.to_owned(),
+                        },
+                    )
+                })
+                .collect();
+            let fields = [
+                ("codec", s.codec_name.clone()),
+                ("profile", s.profile.clone()),
+                ("tag", s.codec_tag_string.clone()),
+                ("pix_fmt", s.pix_fmt.clone()),
+                ("size", size),
+                ("sar", s.sample_aspect_ratio.clone()),
+                ("avg_frame_rate", s.avg_frame_rate.clone()),
+                ("r_frame_rate", s.r_frame_rate.clone()),
+                ("time_base", s.time_base.clone()),
+                ("color_range", s.color_range.clone()),
+                ("color_space", s.color_space.clone()),
+                ("color_transfer", s.color_transfer.clone()),
+                ("color_primaries", s.color_primaries.clone()),
+                ("chroma_location", s.chroma_location.clone()),
+                ("field_order", s.field_order.clone()),
+                (
+                    "attached_pic",
+                    s.is_attached_pic().then(|| "yes".to_owned()),
+                ),
+                (
+                    "side_data",
+                    (!side_data.is_empty()).then(|| side_data.join(", ")),
+                ),
+            ];
+            let described: Vec<String> = fields
+                .into_iter()
+                .filter_map(|(key, value)| value.map(|v| format!("{key}={v}")))
+                .collect();
+            lines.push(format!(
+                "stream {} ({}): {}",
+                s.index,
+                s.codec_type,
+                described.join(", ")
+            ));
+        }
+        lines.join("\n")
+    }
 }
+
+/// Container tags [`ProbeInfo::technical_summary`] keeps: they name the
+/// recording device or software, which explains how the file was encoded.
+const SUMMARY_TAGS: [&str; 10] = [
+    "major_brand",
+    "compatible_brands",
+    "encoder",
+    "com.apple.quicktime.make",
+    "com.apple.quicktime.model",
+    "com.apple.quicktime.software",
+    "com.android.manufacturer",
+    "com.android.model",
+    "com.android.version",
+    "com.android.capture.fps",
+];
 
 /// Run ffprobe on `path`. Fails with [`Error::Other`] if the file cannot be
 /// parsed as media at all.
@@ -526,6 +614,36 @@ mod tests {
             "30000/1001"
         );
         assert_eq!(Rational::parse("25").unwrap().to_string(), "25");
+    }
+
+    #[test]
+    fn technical_summary_has_coding_details_but_nothing_personal() {
+        let json = br#"{
+          "streams": [
+            {"index": 0, "codec_type": "video", "codec_name": "h264", "profile": "High",
+             "codec_tag_string": "avc1", "pix_fmt": "yuvj420p", "width": 1920, "height": 1080,
+             "time_base": "1/90000", "avg_frame_rate": "30/1", "r_frame_rate": "30/1",
+             "color_range": "pc", "color_space": "bt470bg", "field_order": "progressive",
+             "disposition": {"attached_pic": 0}, "tags": {"handler_name": "VideoHandle"}},
+            {"index": 1, "codec_type": "audio", "codec_name": "aac", "profile": "LC",
+             "time_base": "1/48000", "disposition": {"attached_pic": 0}}
+          ],
+          "format": {"format_name": "mov,mp4,m4a,3gp,3g2,mj2", "tags": {
+            "major_brand": "mp42", "com.android.manufacturer": "Google",
+            "com.android.model": "Pixel 8", "creation_time": "2026-10-29T10:00:00Z",
+            "location": "+35.6895+139.6917/", "title": "Birthday"}}
+        }"#;
+        assert_eq!(
+            parse(json).unwrap().technical_summary(),
+            "container: mov,mp4,m4a,3gp,3g2,mj2\n\
+             major_brand: mp42\n\
+             com.android.manufacturer: Google\n\
+             com.android.model: Pixel 8\n\
+             stream 0 (video): codec=h264, profile=High, tag=avc1, pix_fmt=yuvj420p, \
+             size=1920x1080, avg_frame_rate=30/1, r_frame_rate=30/1, time_base=1/90000, \
+             color_range=pc, color_space=bt470bg, field_order=progressive\n\
+             stream 1 (audio): codec=aac, profile=LC, time_base=1/48000"
+        );
     }
 
     #[test]
