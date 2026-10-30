@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 <!-- insertion marker -->
+## [v0.6.0](https://github.com/fgagarin/framecover/releases/tag/v0.6.0) - 2026-10-30
+
+<small>[Compare with v0.5.0](https://github.com/fgagarin/framecover/compare/v0.5.0...v0.6.0)</small>
+
+### Features
+
+- save full-range video without re-encoding; request support for re-encoded formats ([089d17a](https://github.com/fgagarin/framecover/commit/089d17ab5a2a592d133e5c892f25d8de862abc36) by Fedor Gagarin). Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
 ## [v0.5.0](https://github.com/fgagarin/framecover/releases/tag/v0.5.0) - 2026-10-30
 
 <small>[Compare with v0.4.0](https://github.com/fgagarin/framecover/compare/v0.4.0...v0.5.0)</small>
