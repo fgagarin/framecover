@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 <!-- insertion marker -->
+## [v0.5.0](https://github.com/fgagarin/framecover/releases/tag/v0.5.0) - 2026-10-30
+
+<small>[Compare with v0.4.0](https://github.com/fgagarin/framecover/compare/v0.4.0...v0.5.0)</small>
+
+### Features
+
+- Android download card ([2ab5722](https://github.com/fgagarin/framecover/commit/2ab5722c176757d3a7301319b2259e6ac50da766) by Fedor Gagarin). Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
+### Continuous Integration
+
+- build, sign and publish the Android APK ([e4bcd92](https://github.com/fgagarin/framecover/commit/e4bcd92dc090ad69285ee2853b1586e4dce40732) by Fedor Gagarin). Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
 ## [v0.4.0](https://github.com/fgagarin/framecover/releases/tag/v0.4.0) - 2026-10-29
 
 <small>[Compare with v0.3.1](https://github.com/fgagarin/framecover/compare/v0.3.1...v0.4.0)</small>
