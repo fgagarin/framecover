@@ -138,6 +138,14 @@ build_x264() {
 build_x265() {
     log "$PLATFORM: x265"
     work_copy x265
+    # x265 sets m_firstPts / m_bframeDelayTime only once enough frames for
+    # the B-frame delay arrive, so the dts of a one-frame encode (the preview
+    # frame) comes from uninitialised memory. A fresh ffmpeg process usually
+    # reads zeros; in-process encodes reuse the heap and get garbage, which
+    # the mp4 muxer rejects ("pts/dts pair unsupported").
+    grep -q '^    m_numDelayedPic = 0;$' source/encoder/encoder.cpp
+    sed -i 's/^    m_numDelayedPic = 0;$/&\n    m_firstPts = 0;\n    m_bframeDelayTime = 0;/' \
+        source/encoder/encoder.cpp
     # x265's aarch64 assembly does not build with the NDK's clang; x86_64
     # keeps its (nasm) assembly.
     local asm=ON
@@ -285,10 +293,11 @@ package_fftools() {
 }
 
 # step NAME lib: run build_<lib> unless this platform already built the
-# pinned commit (FORCE=1 rebuilds); sets SKIPPED=1 when it did nothing.
+# pinned commit with this script (FORCE=1 rebuilds); sets SKIPPED=1 when it
+# did nothing.
 step() {
     local commit=${1}_COMMIT stamp=$PREFIX/.built-$2
-    commit=${!commit}
+    commit="${!commit} $(sha256sum "$SCRIPT_DIR/build-ffmpeg.sh" | cut -d' ' -f1)"
     if [[ -z ${FORCE:-} && -f $stamp && $(<"$stamp") == "$commit" ]]; then
         log "$PLATFORM: $2 (up to date)"
         SKIPPED=1

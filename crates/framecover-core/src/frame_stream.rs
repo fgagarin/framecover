@@ -37,11 +37,11 @@ use std::time::Instant;
 
 use image::RgbImage;
 
-use crate::color;
 use crate::error::Result;
 use crate::ffmpeg::{self, Tool};
 use crate::frames::{FfmpegFrameExtractor, FrameExtractor, format_secs, seek_point_us};
 use crate::models::VideoFile;
+use crate::{color, imaging};
 
 #[cfg(feature = "libav")]
 mod native;
@@ -113,6 +113,8 @@ const END_WINDOWS_MS: [u64; 3] = [1_000, 10_000, 60_000];
 /// Persistent ffmpeg decoding session plus frame cache for one video.
 pub struct FfmpegFrameStream {
     video: VideoFile,
+    /// Clockwise rotation of returned frames (the cache keeps them as decoded).
+    rotation: u32,
     cache: FrameCache,
     clock: Option<Clock>,
     session: Option<ActiveSession>,
@@ -159,6 +161,7 @@ impl FfmpegFrameStream {
     /// A stream keeping at most about `budget_bytes` of decoded frames.
     pub fn with_cache_budget(video: VideoFile, budget_bytes: usize) -> Self {
         let mut stream = Self {
+            rotation: color::display_for(&video.path).rotation,
             video,
             cache: FrameCache::new(budget_bytes),
             clock: None,
@@ -363,7 +366,7 @@ impl FrameSource for FfmpegFrameStream {
             return FfmpegFrameExtractor.extract(&self.video, offset_ms);
         }
         match self.stream_frame(offset_ms) {
-            Ok(frame) => Ok(RgbImage::clone(&frame)),
+            Ok(frame) => Ok(imaging::rotate(&frame, self.rotation)),
             Err(cause) => {
                 log::warn!(
                     "frame stream for '{}' failed at {offset_ms} ms ({cause}); \

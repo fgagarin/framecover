@@ -697,8 +697,6 @@ impl ThumbnailWriter for FormatDispatchThumbnailWriter {
         stages.start("Preparing thumbnail");
 
         let outcome = (|| -> Result<ApplyResult> {
-            // Preserve the selected frame for zero-frame preview fallbacks.
-            let frame_bytes = imaging::encode_png(thumbnail)?;
             let jpeg_bytes = imaging::cover_jpeg(thumbnail)?;
 
             match video.format {
@@ -715,7 +713,7 @@ impl ThumbnailWriter for FormatDispatchThumbnailWriter {
                     let duration_shift_ms = embed_mp4_mov(
                         &video.path,
                         &jpeg_bytes,
-                        &frame_bytes,
+                        thumbnail,
                         &mut stages,
                         Mp4Options {
                             position_ms,
@@ -878,7 +876,7 @@ fn fast_path_format(ext: &str) -> Option<&'static str> {
 fn embed_mp4_mov(
     video_path: &Path,
     jpeg_bytes: &[u8],
-    frame_bytes: &[u8],
+    thumbnail: &RgbImage,
     stages: &mut Stages<'_>,
     opts: Mp4Options,
 ) -> Result<u64> {
@@ -891,6 +889,16 @@ fn embed_mp4_mov(
     let info = probe::probe(video_path)?;
     let replace_existing_preview = opts.replace_existing_preview;
     let mut reencode = ReencodeParams::new(&info, video_path, opts.frame_step_ms)?;
+    // The thumbnail is upright; the inserted frame is stored like the
+    // source's frames, which the display matrix turns upright.
+    let frame_bytes =
+        imaging::encode_png(&imaging::rotate(thumbnail, (360 - reencode.rotation) % 360))?;
+    // No ffmpeg run below keeps the source's display matrix: put it back.
+    let source_matrix = info
+        .first_playable_video()
+        .and_then(Stream::track_id)
+        .and_then(|id| sample_entries::track_matrix(video_path, id).ok())
+        .filter(|m| *m != sample_entries::IDENTITY_MATRIX);
     // HDR10 static metadata, repeated in the encoded preview / re-encode.
     let hdr = info
         .first_playable_video()
@@ -944,7 +952,7 @@ fn embed_mp4_mov(
         stripped: mkstemp(&dir, ".vt_stripped_", ".mp4")?,
     };
     std::fs::write(&temps.cover, jpeg_bytes)?;
-    std::fs::write(&temps.frame, frame_bytes)?;
+    std::fs::write(&temps.frame, &frame_bytes)?;
 
     let mut shift_ms = 0u64;
     atomic_replace(
@@ -975,6 +983,15 @@ fn embed_mp4_mov(
                     &reencode,
                     replace_existing_preview,
                 ))?;
+                // Android galleries thumbnail the largest of the first sync
+                // samples: compared with the re-encoded ones.
+                if let Some(id) = probe::probe(tmp_video_path)?
+                    .first_playable_video()
+                    .and_then(Stream::track_id)
+                    && let Some(size) = thumbnail_frame_size(tmp_video_path, id, 1)
+                {
+                    sample_entries::pad_first_sample(tmp_video_path, id, size)?;
+                }
                 reencode.frame_duration
             };
             // Initial saves prepend a frame; replacements keep the duration.
@@ -993,13 +1010,46 @@ fn embed_mp4_mov(
             stages.start("Writing cover art");
             mp4_tags::write_covr(tmp_video_path, jpeg_bytes)?;
             stages.start("Writing frame metadata");
-            write_source_metadata(tmp_video_path, shifted_frame_number, shifted_position_ms)
+            write_source_metadata(tmp_video_path, shifted_frame_number, shifted_position_ms)?;
+            if let Some(matrix) = &source_matrix {
+                restore_matrix(tmp_video_path, matrix)?;
+            }
+            Ok(())
         },
         false,
     )?;
     stages.start("Cleaning up temporary files");
     drop(temps);
     Ok(shift_ms)
+}
+
+/// Size the inserted frame needs to be the frame Android shows as the video's
+/// thumbnail: more than the largest of the first sync samples of track
+/// `track_id` of `path` after the first `skip` ones (a frame being replaced
+/// or the inserted one). The margin covers parameter sets a stream copy
+/// adds to keyframes. `None` when the sizes cannot be read.
+fn thumbnail_frame_size(path: &Path, track_id: u32, skip: usize) -> Option<u64> {
+    const MARGIN: u64 = 4096;
+    let count = sample_entries::THUMBNAIL_SYNC_SAMPLES + skip;
+    match sample_entries::sync_sample_sizes(path, track_id, count) {
+        Ok(sizes) => sizes.into_iter().skip(skip).max().map(|max| max + MARGIN),
+        Err(err) => {
+            debug!(
+                "cannot read the sync samples of '{}': {err}",
+                path.display()
+            );
+            None
+        }
+    }
+}
+
+/// Give the video track of `output` the source's `tkhd` matrix.
+fn restore_matrix(output: &Path, matrix: &[u8; sample_entries::MATRIX_LEN]) -> Result<()> {
+    let id = probe::probe(output)?
+        .first_playable_video()
+        .and_then(Stream::track_id)
+        .ok_or_else(|| Error::Other("the output video has no track ID".to_owned()))?;
+    sample_entries::set_track_matrix(output, id, matrix)
 }
 
 /// Source properties the full re-encode needs to insert a preview frame.
@@ -1019,6 +1069,9 @@ struct ReencodeParams {
     /// Colour description of the output (`None` for 8-bit SDR sources).
     color: Option<TargetColor>,
     hdr: Option<HdrStaticMetadata>,
+    /// Display rotation of the source ([`Stream::rotation`]): decoded as
+    /// stored (`-noautorotate`), like the inserted frame.
+    rotation: u32,
 }
 
 /// Video encoder of the full re-encode.
@@ -1064,6 +1117,7 @@ impl ReencodeParams {
             encoder,
             color: (encoder != ReencodeEncoder::X264).then(|| TargetColor::of(stream)),
             hdr: None,
+            rotation: stream.rotation(),
         })
     }
 
@@ -1163,8 +1217,15 @@ fn reencode_args(
          [0:{index}]{trim}setpts=PTS-STARTPTS,setsar={sar}{base_format}[base];\
          [poster][base]concat=n=2:v=1:a=0[v]"
     );
-    let mut args = args![
-        "-y",
+    // Rotated sources are decoded as stored, the orientation of the frame.
+    let stored: Vec<OsString> = if params.rotation == 0 {
+        Vec::new()
+    } else {
+        args!["-noautorotate"]
+    };
+    let mut args = args!["-y"];
+    args.extend(stored.iter().cloned());
+    args.extend(args![
         "-i",
         video_path,
         "-loop",
@@ -1175,10 +1236,11 @@ fn reencode_args(
         temps.frame,
         "-i",
         temps.cover,
-    ];
+    ]);
     let side_input = if replace_existing_preview {
         "0"
     } else {
+        args.extend(stored);
         args.extend(args![
             "-itsoffset",
             format_g(*frame_duration, 12),
@@ -1607,6 +1669,17 @@ fn write_concat(
             video_path.display()
         );
         return Ok(false);
+    }
+
+    // Android galleries thumbnail the largest of the first sync samples.
+    if let (Some(source_id), Some(preview_id)) = (
+        params.source_track_id,
+        preview.first_playable_video().and_then(Stream::track_id),
+    ) {
+        let skip = usize::from(replace_existing_preview);
+        if let Some(size) = thumbnail_frame_size(video_path, source_id, skip) {
+            sample_entries::pad_first_sample(&temps.preview, preview_id, size)?;
+        }
     }
 
     let mut concat_source: &Path = video_path;

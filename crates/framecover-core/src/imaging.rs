@@ -129,6 +129,16 @@ pub fn load_image(path: &std::path::Path) -> Result<RgbImage> {
     Ok(img.into_rgb8())
 }
 
+/// `img` turned `degrees` clockwise (0, 90, 180 or 270; others leave it as is).
+pub fn rotate(img: &RgbImage, degrees: u32) -> RgbImage {
+    match degrees {
+        90 => image::imageops::rotate90(img),
+        180 => image::imageops::rotate180(img),
+        270 => image::imageops::rotate270(img),
+        _ => img.clone(),
+    }
+}
+
 /// File extensions [`load_image`] accepts (for file dialogs and drops).
 pub const IMAGE_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "webp", "bmp"];
 

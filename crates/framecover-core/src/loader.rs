@@ -46,8 +46,11 @@ impl VideoLoader for FfprobeVideoLoader {
         };
 
         let duration_ms = duration_ms(stream, &info);
-        let width = stream.width.unwrap_or(0);
-        let height = stream.height.unwrap_or(0);
+        // Display size: frames are shown upright (see `Stream::rotation`).
+        let (mut width, mut height) = (stream.width.unwrap_or(0), stream.height.unwrap_or(0));
+        if stream.rotation() % 180 == 90 {
+            (width, height) = (height, width);
+        }
         let frame_step_ms = frame_step_ms(stream.effective_rate(), stream.base_rate());
         let existing_thumbnail = extract_existing_thumbnail(&abs_path, &info);
         let is_writable = is_writable(&abs_path);
