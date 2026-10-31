@@ -1706,7 +1706,7 @@ dependencies = [
 
 [[package]]
 name = "framecover"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "android_logger",
  "clap",
@@ -1733,7 +1733,7 @@ dependencies = [
 
 [[package]]
 name = "framecover-core"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "criterion",
  "framecover-libav",
@@ -1756,7 +1756,7 @@ dependencies = [
 
 [[package]]
 name = "framecover-libav"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "cc",
  "log",
