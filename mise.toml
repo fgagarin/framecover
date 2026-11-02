@@ -1,0 +1,57 @@
+# Toolchain and task runner; mirrors the Makefile targets (every task
+# delegates to cargo / `cargo xtask`, see `cargo xtask help`).
+# Android builds need the NDK/SDK/Gradle: use the scripts/android image.
+
+[tools]
+rust = { version = "stable", components = "rustfmt,clippy" }
+git-cliff = "2.14.2"
+
+[tasks.ffmpeg]
+description = "Download the pinned FFmpeg build for this OS into vendor/ffmpeg/"
+run = "cargo xtask fetch-ffmpeg"
+
+[tasks.build]
+description = "Build the app (debug)"
+run = "cargo build -p framecover"
+
+[tasks.run]
+description = "Run the app (debug)"
+run = "cargo run -p framecover"
+raw = true
+
+[tasks.test]
+description = "Run all workspace tests"
+run = "cargo test --workspace"
+
+[tasks.lint]
+description = "cargo fmt --check + clippy -D warnings"
+run = [
+  "cargo fmt --all --check",
+  "cargo clippy --workspace --all-targets -- -D warnings",
+]
+
+[tasks.fmt]
+description = "Format the code"
+run = "cargo fmt --all"
+
+[tasks.changelog]
+description = "Regenerate CHANGELOG.md (git-cliff)"
+run = "cargo xtask changelog"
+
+[tasks.release]
+description = "Commit and tag a release (X.Y.Z, or derived from commits); never pushes"
+usage = 'arg "[version]" help="Release version X.Y.Z (default: from Conventional Commits)"'
+run = "cargo xtask release create{% if usage.version %} --version {{usage.version}}{% endif %}"
+
+[tasks.dist]
+description = "Build release-assets/framecover-<version>-<platform>.* for this OS"
+depends = ["ffmpeg"]
+run = "cargo xtask package {{os()}}"
+
+[tasks.clean]
+description = "Remove build artefacts"
+run = ["cargo clean", "rm -rf release-assets"]
+run_windows = [
+  "cargo clean",
+  "if exist release-assets rmdir /s /q release-assets",
+]
