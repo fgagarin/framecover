@@ -92,3 +92,6 @@ Thumbs.db
 # Android signing keys
 *.jks
 *.keystore
+
+# Claude Code session worktrees
+.claude/worktrees/
